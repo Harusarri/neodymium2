@@ -346,8 +346,9 @@ public final class OutsideWorldOptimizer {
         LevelChunk outsideChunk = RegionSpawner.currentOutsideChunk();
         if (outsideChunk != null && RegionSpawner.isCurrentOutsideChunkStructureEmpty()) {
             shortCircuitedStructureSpawns++;
+            var base = level.dimensionType().attributes().applyModifier(EnvironmentAttributes.NATURAL_MOB_SPAWNS, MobSpawnSettings.EMPTY);
             var rough = outsideChunk.getNoiseBiome(pos.getX() >> 2, pos.getY() >> 2, pos.getZ() >> 2).value();
-            return rough.getAttributes().applyModifier(EnvironmentAttributes.NATURAL_MOB_SPAWNS, MobSpawnSettings.EMPTY).getMobsToSpawn(category);
+            return rough.getAttributes().applyModifier(EnvironmentAttributes.NATURAL_MOB_SPAWNS, base).getMobsToSpawn(category);
         }
         if (RegionSpawner.isInsideProtectedChunk()) return null;
         int cx = pos.getX() >> 4, cz = pos.getZ() >> 4;
@@ -355,8 +356,9 @@ public final class OutsideWorldOptimizer {
         var chunk = level.getChunkSource().getChunkNow(cx, cz);
         if (chunk != null && chunk.getAllReferences().isEmpty()) {
             shortCircuitedStructureSpawns++;
+            var base = level.dimensionType().attributes().applyModifier(EnvironmentAttributes.NATURAL_MOB_SPAWNS, MobSpawnSettings.EMPTY);
             var rough = chunk.getNoiseBiome(pos.getX() >> 2, pos.getY() >> 2, pos.getZ() >> 2).value();
-            return rough.getAttributes().applyModifier(EnvironmentAttributes.NATURAL_MOB_SPAWNS, MobSpawnSettings.EMPTY).getMobsToSpawn(category);
+            return rough.getAttributes().applyModifier(EnvironmentAttributes.NATURAL_MOB_SPAWNS, base).getMobsToSpawn(category);
         }
         return null;
     }

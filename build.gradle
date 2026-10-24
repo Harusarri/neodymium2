@@ -1,0 +1,85 @@
+plugins {
+    id 'net.fabricmc.fabric-loom' version "${loom_version}"
+    id 'maven-publish'
+}
+
+version = project.mod_version
+group = project.maven_group
+
+base {
+    archivesName = project.archives_base_name
+}
+
+repositories {
+    exclusiveContent {
+        forRepository {
+            maven {
+                name = "Modrinth"
+                url = "https://api.modrinth.com/maven"
+            }
+        }
+        filter {
+            includeGroup "maven.modrinth"
+        }
+    }
+    mavenCentral()
+}
+
+sourceSets {
+    compileOnlyStubs {
+        java.srcDirs = ['src/compileOnly/java']
+    }
+    main {
+        compileClasspath += sourceSets.compileOnlyStubs.output
+    }
+    unitTest {
+        java {
+            srcDirs = ['tests']
+            include 'CoreTests.java', 'ChunkTraversalTests.java', 'VillagerConfigTests.java', 'PoiRevisionTests.java', 'ModuleArchitectureTests.java'
+        }
+        compileClasspath += sourceSets.main.output + configurations.compileClasspath
+        runtimeClasspath += output + compileClasspath
+    }
+}
+
+dependencies {
+    minecraft "com.mojang:minecraft:${project.minecraft_version}"
+    implementation "net.fabricmc:fabric-loader:${project.loader_version}"
+    implementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_api_version}"
+    compileOnly "maven.modrinth:servercore:${project.servercore_version}"
+}
+
+def targetJavaVersion = 25
+tasks.withType(JavaCompile).configureEach {
+    it.options.encoding = "UTF-8"
+    it.options.release = targetJavaVersion
+    it.options.compilerArgs.add("-proc:none")
+}
+
+java {
+    def javaVersion = JavaVersion.toVersion(targetJavaVersion)
+    if (JavaVersion.current() < javaVersion) {
+        toolchain.languageVersion = JavaLanguageVersion.of(targetJavaVersion)
+    }
+}
+
+jar {
+    from("LICENSE") {
+        rename { "${it}_${project.archives_base_name}" }
+    }
+}
+
+def unitTestClasses = ['CoreTests', 'ChunkTraversalTests', 'VillagerConfigTests', 'PoiRevisionTests']
+unitTestClasses.each { mainClassName ->
+    tasks.register("run${mainClassName}", JavaExec) {
+        dependsOn classes, compileUnitTestJava
+        classpath = sourceSets.unitTest.runtimeClasspath
+        mainClass = mainClassName
+    }
+}
+
+tasks.register('runUnitTests') {
+    dependsOn unitTestClasses.collect { "run${it}" }
+}
+
+check.dependsOn tasks.named('runUnitTests')

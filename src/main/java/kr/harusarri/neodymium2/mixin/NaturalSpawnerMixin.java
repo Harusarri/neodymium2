@@ -77,6 +77,20 @@ public abstract class NaturalSpawnerMixin {
         }
     }
 
+    @WrapOperation(
+        method = "spawnCategoryForChunk(Lnet/minecraft/world/entity/MobCategory;Lnet/minecraft/server/level/ServerLevel;Lnet/minecraft/world/level/chunk/LevelChunk;Lnet/minecraft/world/level/NaturalSpawner$SpawnPredicate;Lnet/minecraft/world/level/NaturalSpawner$AfterSpawnCallback;)V",
+        at = @At(value = "INVOKE", target = "Lnet/minecraft/world/level/NaturalSpawner;getRandomPosWithin(Lnet/minecraft/world/level/Level;Lnet/minecraft/world/level/chunk/LevelChunk;)Lnet/minecraft/core/BlockPos;")
+    )
+    private static BlockPos neo$resolveOutsideSpawnPos(
+        net.minecraft.world.level.Level level,
+        LevelChunk chunk,
+        Operation<BlockPos> original,
+        MobCategory category
+    ) {
+        BlockPos pos = original.call(level, chunk);
+        return RegionSpawner.resolveOutsideSpawnPos(level, chunk, category, pos);
+    }
+
     @Inject(method = "isRightDistanceToPlayerAndSpawnPoint", at = @At("HEAD"), cancellable = true)
     private static void neo$preFilter3dDespawnSphere(ServerLevel level, ChunkAccess chunk, BlockPos.MutableBlockPos pos, double distSqr, CallbackInfoReturnable<Boolean> cir) {
         if (RegionSpawner.shouldRejectOutsideSpawnPos(level, pos, distSqr)) {

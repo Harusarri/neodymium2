@@ -90,6 +90,41 @@ public final class PlayerSpatialGrid {
         return false;
     }
 
+    public static double horizDistSqToNearestPlayer(ServerLevel level, double x, double z) {
+        ensureUpdated(level);
+        int n = count;
+        double[] xs = px, zs = pz;
+        double best = Double.MAX_VALUE;
+        for (int i = 0; i < n; i++) {
+            double dx = xs[i] - x;
+            double dz = zs[i] - z;
+            double d2 = dx * dx + dz * dz;
+            if (d2 < best) {
+                best = d2;
+            }
+        }
+        return best;
+    }
+
+    public static int nearestPlayerBlockY(ServerLevel level, double x, double z) {
+        ensureUpdated(level);
+        int n = count;
+        if (n == 0) return Integer.MIN_VALUE;
+        double[] xs = px, ys = py, zs = pz;
+        double best = Double.MAX_VALUE;
+        double bestY = 0.0;
+        for (int i = 0; i < n; i++) {
+            double dx = xs[i] - x;
+            double dz = zs[i] - z;
+            double d2 = dx * dx + dz * dz;
+            if (d2 < best) {
+                best = d2;
+                bestY = ys[i];
+            }
+        }
+        return net.minecraft.util.Mth.floor(bestY);
+    }
+
     public static double distSqToNearestPlayer(ServerLevel level, double x, double y, double z) {
         ensureUpdated(level);
         int n = count;

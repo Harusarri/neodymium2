@@ -136,13 +136,17 @@ public final class RegionSpawner {
         if (!enabled()) return false;
         boolean protectedBlock = Neodymium2.regionProtectsBlock(level, pos);
         if (!protectedBlock && entity instanceof Mob mob && !mob.isPersistenceRequired() && !mob.requiresCustomPersistence()) {
-            boolean highPop = level.players().size() >= 15 || OutsideWorldOptimizer.msptGear(level.getServer()) > 0;
+            int gear = OutsideWorldOptimizer.msptGear(level.getServer());
+            boolean highPop = level.players().size() >= 15 || gear > 0;
             boolean nonTicking = !level.isPositionEntityTicking(pos);
             boolean inactive = ((me.wesley1808.servercore.common.interfaces.activation_range.ActivationEntity) mob).servercore$isInactive();
             if (highPop || nonTicking || inactive) {
                 double distSq = PlayerSpatialGrid.distSqToNearestPlayer(level, mob.getX(), mob.getY(), mob.getZ());
-                int despawnDist = highPop ? Math.min(72, category.getDespawnDistance()) : category.getDespawnDistance();
-                if (distSq > (double) (despawnDist * despawnDist) && mob.removeWhenFarAway(distSq)) {
+                double horizDistSq = PlayerSpatialGrid.horizDistSqToNearestPlayer(level, mob.getX(), mob.getZ());
+                int despawnDist3d = gear >= 2 ? Math.min(96, category.getDespawnDistance()) : category.getDespawnDistance();
+                int despawnDistHoriz = highPop ? Math.min(72, category.getDespawnDistance()) : category.getDespawnDistance();
+                if ((distSq > (double) (despawnDist3d * despawnDist3d) || horizDistSq > (double) (despawnDistHoriz * despawnDistHoriz))
+                    && mob.removeWhenFarAway(distSq)) {
                     PENDING_DESPAWNS.add(mob);
                     preFilteredPositions++;
                     return true;
@@ -151,7 +155,14 @@ public final class RegionSpawner {
                 if ((nonTicking || inactive) && distSq > (double) (noDespawnDist * noDespawnDist)) {
                     int nat = mob.getNoActionTime() + 1;
                     mob.setNoActionTime(nat);
-                    if (nat > 600 && level.getRandom().nextInt(800) == 0 && mob.removeWhenFarAway(distSq)) {
+                    int playerY = PlayerSpatialGrid.nearestPlayerBlockY(level, mob.getX(), mob.getZ());
+                    boolean deepCave = level.dimension() == net.minecraft.world.level.Level.OVERWORLD
+                        && mob.getBlockY() < 32
+                        && playerY != Integer.MIN_VALUE
+                        && playerY - mob.getBlockY() > 56;
+                    int minNat = deepCave ? 200 : 600;
+                    int odds = deepCave ? 200 : 800;
+                    if (nat > minNat && level.getRandom().nextInt(odds) == 0 && mob.removeWhenFarAway(distSq)) {
                         PENDING_DESPAWNS.add(mob);
                         preFilteredPositions++;
                         return true;
@@ -289,23 +300,117 @@ public final class RegionSpawner {
         return java.util.List.of();
     }
 
+    private static boolean isSlimeChunk(ServerLevel level, LevelChunk chunk) {
+        return net.minecraft.world.level.levelgen.WorldgenRandom.seedSlimeChunk(
+            chunk.getPos().x(), chunk.getPos().z(), level.getSeed(), 987234911L
+        ).nextInt(10) == 0;
+    }
+
+    private static boolean isCandidateOutsideMonsterFloor(ServerLevel level, LevelChunk chunk, BlockPos pos, int playerY, boolean slimeChunk) {
+        int y = pos.getY();
+        if (y < level.getMinY() + 1) return false;
+        boolean overworld = level.dimension() == net.minecraft.world.level.Level.OVERWORLD;
+        if (overworld && y < 32 && playerY != Integer.MIN_VALUE && playerY - y > 56 && !slimeChunk) {
+            return false;
+        }
+        double dist3dSq = PlayerSpatialGrid.distSqToNearestPlayer(level, pos.getX() + 0.5, y, pos.getZ() + 0.5);
+        if (dist3dSq <= 24.0 * 24.0 || dist3dSq > 128.0 * 128.0) {
+            return false;
+        }
+        var state = chunk.getBlockState(pos);
+        if (state.isRedstoneConductor(chunk, pos)) return false;
+        if (state.getFluidState().isEmpty()) {
+            var below = chunk.getBlockState(pos.below());
+            if (below.isAir() || !below.getFluidState().isEmpty()) return false;
+        }
+        if (overworld && !(y < 40 && slimeChunk) && state.getFluidState().isEmpty()) {
+            if (level.getBrightness(net.minecraft.world.level.LightLayer.BLOCK, pos) > 0) return false;
+            if (level.isBrightOutside() && level.getBrightness(net.minecraft.world.level.LightLayer.SKY, pos) > 7) return false;
+        }
+        return true;
+    }
+
+    /**
+     * Paper-style Low-Level Mob Farm Floor Resolver for CHUNK_OUTSIDE:
+     * Because outside chunks run on a 4-tick strided cadence, a single uniform random Y in [-64..topY]
+     * misses a player's 1-3 story dark-room mob farm >98% of the time (wasting picks on solid underground
+     * stone or open daylight sky and triggering the 16-tick empty-chunk backoff).
+     * When the initial random position fails in a chunk within 64 blocks horizontally of a player,
+     * performs up to 8 ultra-fast O(1) section/light probes in the player's active vertical band
+     * (y >= 32 when on surface/sky, or playerY ± 48 when underground) so dark-room mob farms reliably
+     * locate their spawning floor without ticking extra chunks or spawning deep underground cave mobs.
+     */
+    public static BlockPos resolveOutsideSpawnPos(net.minecraft.world.level.Level rawLevel, LevelChunk chunk, MobCategory category, BlockPos pos) {
+        if (currentChunkSpawns < 0 || category != MobCategory.MONSTER || !(rawLevel instanceof ServerLevel level)) {
+            return pos;
+        }
+        int cx = chunk.getPos().x(), cz = chunk.getPos().z();
+        double centerX = (cx << 4) + 8.0, centerZ = (cz << 4) + 8.0;
+        int playerY = PlayerSpatialGrid.nearestPlayerBlockY(level, centerX, centerZ);
+        if (playerY == Integer.MIN_VALUE) return pos;
+        boolean overworld = level.dimension() == net.minecraft.world.level.Level.OVERWORLD;
+        boolean slimeChunk = overworld && isSlimeChunk(level, chunk);
+        if (isCandidateOutsideMonsterFloor(level, chunk, pos, playerY, slimeChunk)) {
+            return pos;
+        }
+        if (OutsideWorldOptimizer.msptGear(level.getServer()) >= 2) {
+            return pos;
+        }
+        if (PlayerSpatialGrid.horizDistSqToNearestPlayer(level, centerX, centerZ) > 64.0 * 64.0) {
+            return pos;
+        }
+        int minLevelY = level.getMinY() + 1;
+        int minBandY = (overworld && playerY >= 48)
+            ? Math.max(32, Math.max(minLevelY, playerY - 124))
+            : Math.max(minLevelY, playerY - 48);
+        var rand = level.getRandom();
+        int baseX = cx << 4, baseZ = cz << 4;
+        for (int i = 0; i < 8; i++) {
+            int rx = baseX + rand.nextInt(16);
+            int rz = baseZ + rand.nextInt(16);
+            int topY = chunk.getHeight(net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, rx, rz) + 1;
+            int maxBandY = Math.min(topY, playerY + 124);
+            if (maxBandY <= minBandY) continue;
+            int ry = net.minecraft.util.Mth.randomBetweenInclusive(rand, minBandY, maxBandY);
+            BlockPos cand = new BlockPos(rx, ry, rz);
+            if (isCandidateOutsideMonsterFloor(level, chunk, cand, playerY, slimeChunk)) {
+                return cand;
+            }
+        }
+        return pos;
+    }
+
     /**
      * Paper / Gale 3D Sphere Despawn Pre-Filter:
      * In Vanilla, isRightDistanceToPlayerAndSpawnPoint only checks horizontal distance >24,
      * and defers the 3D 128-block despawn sphere check until AFTER Mob instantiation.
-     * In OUTSIDE chunks, reject >128-block 3D positions immediately before Mob allocation.
+     * In OUTSIDE chunks, reject >128-block 3D positions immediately before Mob allocation,
+     * while preserving the full 128-block vertical despawn sphere for sky mob farms and culling
+     * unseen deep underground caves (y < 32) far below surface/sky players.
      */
     public static boolean shouldRejectOutsideSpawnPos(ServerLevel level, BlockPos pos, double horizontalDistSqr) {
         if (currentChunkSpawns < 0) return false; // Protected chunk -> 100% pure Vanilla
-        boolean highPop = level.players().size() >= 15 || OutsideWorldOptimizer.msptGear(level.getServer()) > 0;
+        int gear = OutsideWorldOptimizer.msptGear(level.getServer());
+        boolean highPop = level.players().size() >= 15 || gear > 0;
         int simDist = level.getServer() != null && level.getServer().getPlayerList() != null
             ? level.getServer().getPlayerList().getSimulationDistance()
             : 10;
-        double maxActiveDist = highPop ? 64.0 : Math.min(128.0, (simDist + 1) * 16.0);
-        double maxActiveDistSq = maxActiveDist * maxActiveDist;
-        if (horizontalDistSqr > maxActiveDistSq || PlayerSpatialGrid.distSqToNearestPlayer(level, pos.getX() + 0.5, pos.getY(), pos.getZ() + 0.5) > maxActiveDistSq) {
+        double maxHorizDist = highPop ? 64.0 : Math.min(128.0, (simDist + 1) * 16.0);
+        double max3dDist = gear >= 2 ? 96.0 : 128.0;
+        if (horizontalDistSqr > maxHorizDist * maxHorizDist
+            || PlayerSpatialGrid.distSqToNearestPlayer(level, pos.getX() + 0.5, pos.getY(), pos.getZ() + 0.5) > max3dDist * max3dDist) {
             preFilteredPositions++;
             return true;
+        }
+        if (level.dimension() == net.minecraft.world.level.Level.OVERWORLD && pos.getY() < 32) {
+            int playerY = PlayerSpatialGrid.nearestPlayerBlockY(level, pos.getX() + 0.5, pos.getZ() + 0.5);
+            if (playerY != Integer.MIN_VALUE && playerY - pos.getY() > (gear >= 2 ? 48 : 56)) {
+                LevelChunk chunk = currentOutsideChunk;
+                if (chunk == null || !isSlimeChunk(level, chunk)) {
+                    preFilteredPositions++;
+                    return true;
+                }
+            }
         }
         return false;
     }

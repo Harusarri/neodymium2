@@ -1,4 +1,5 @@
 # Build & test outputs
+.gradle/
 build/
 runtime/
 evidence/
@@ -26,10 +27,7 @@ TEST-REPORT.md
 MANUAL.md
 ARCHIVE-SHA256SUMS
 PACKAGE-SHA256SUMS
-tools/archive_*.py
-tools/export_*.py
-tools/run_*.py
-tools/validate_*.py
+tools/*.py
 tools/SparkTreeExport.java
 
 # External bridge artifacts

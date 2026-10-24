@@ -21,7 +21,7 @@ It preserves **100% vanilla tick parity inside designated Vanilla-Sensitive Prot
 
 * **Region-Aware ServerCore Integration**: Protected regions always tick at 100% vanilla rate; outside entities use dynamic Entity Activation Range (EAR) and tick intervals, automatically waking on player or piston/shulker interaction.
 * **Villager AI (Brain) Maintenance Optimization**: Elides redundant Brain ticks for idle/trading villagers outside protected regions while preserving trade restocking, price gossip, zombie curing discounts, Hero of the Village gifts, and job-site acquisition (`PoiRevisionGrid`).
-* **Outside Spawner · Entity · World Engine Optimizations**: Adaptive natural spawn intervals, distance-squared AI/push throttling (DAB), dormant block-entity compaction, fluid/random-tick throttling, and lazy-chunk projectile boundary cleanup.
+* **Outside Spawner · Entity · World Engine Optimizations**: Adaptive natural spawn intervals, Paper-style low-level mob farm support (preserving 128-block 3D despawn sphere, active Y-band spawn probing, and mob-farm monster EAR/AI activation while culling deep underground cave spawns), distance-squared AI/push throttling (DAB), dormant block-entity compaction, fluid/random-tick throttling, and lazy-chunk projectile boundary cleanup.
 * **Standalone & External Region Plugin Support**:
   * **Standalone Mode**: Protect chunks or chunk ranges directly via `/neodymium2 chunk` without any external region plugin.
   * **External Integration (`NeodymiumApi`)**: Connect external region managers such as `YAWPManager` via `NeodymiumRegionProvider`.
@@ -49,7 +49,7 @@ It preserves **100% vanilla tick parity inside designated Vanilla-Sensitive Prot
 
 * **구역 인지형 ServerCore 연동**: 보호 구역 내부 엔티티는 항상 정상 틱을 유지하고, 구역 외부 엔티티는 동적 활성 범위(EAR) 및 틱 간격을 적용합니다.
 * **주민 AI (Brain) 유지보수 최적화**: 구역 외부의 거래/대기 주민 Brain 연산을 생략하면서도 거래 재입고, 가격 변동, 좀비 치료 할인, 마을의 영웅 선물, 작업대 탐색(`PoiRevisionGrid`)은 바닐라와 동일하게 유지합니다.
-* **구역 외 스폰 · 엔티티 · 월드 최적화**: 구역 외 자연 스폰 간격 조절, 원거리 AI/밀치기 생략, 유휴 블록 엔티티·유체·랜덤 틱 감속 및 레이지 청크 투사체 정리를 수행합니다.
+* **구역 외 스폰 · 엔티티 · 월드 최적화**: 구역 외 자연 스폰 간격 조절, Paper 스타일 일반 구역 저수준 몹팜 작동 지원(128블록 3D 구체 유지, 활성 Y-밴드 스폰 보정, 심층 지하 동굴 스폰 컷오프, 몹팜 반경 몬스터 EAR/배회 AI 활성화), 원거리 AI/밀치기 생략, 유휴 블록 엔티티·유체·랜덤 틱 감속 및 레이지 청크 투사체 정리를 수행합니다.
 * **단독 사용 & 외부 구역 플러그인 연동 지원**:
   * **단독 사용 (Standalone)**: 별도의 구역 모드 없이 내장 `/neodymium2 chunk` 명령어로 보호 청크를 직접 지정할 수 있습니다.
   * **외부 연동 (Public API)**: `NeodymiumApi` 및 `NeodymiumRegionProvider`를 통해 `YAWPManager` 등 외부 구역 관리 모드와 연동할 수 있습니다.
@@ -127,6 +127,22 @@ boolean chunkProtected  = NeodymiumApi.isProtectedChunk(level, chunkX, chunkZ);
 * **[Lithium](https://github.com/CaffeineMC/lithium)** (`CaffeineMC`) — `Brain` 실행 태스크 캐시 호환(`BrainTaskCache`) 및 `<lithium_sleeping>` 휴면 블록 엔티티 Active-Set 압축 구조 참조
 * **[Fabric Carpet](https://github.com/gnembon/fabric-carpet) / [Carpet-TIS-Addition](https://github.com/TISUnion/Carpet-TIS-Addition)** — `lagFreeSpawning` (고속 AABB 충돌 판정 및 Mob 인스턴스 프리쿠킹 캐시), 가짜 플레이어(`EntityPlayerMPFake`) 발전과제 조건 생략, 비활성 `MicroTiming` 로거 단락 호환성 참조
 * **[Yet Another World Protector (YAWP)](https://github.com/Z0rdak/Yet-Another-World-Protector)** — 선택적 보호 구역 연동 및 `FlagEvaluator` 위치 캐시 대상
+
+---
+
+## 빌드 방법 (Building from Source)
+
+본 프로젝트는 표준 **Gradle (Fabric Loom)** 빌드를 지원합니다 (Java 25 필요).
+
+```bash
+# Linux / macOS
+./gradlew build
+
+# Windows (PowerShell / CMD)
+.\gradlew.bat build
+```
+
+빌드된 JAR 파일은 `build/libs/` 디렉터리에 생성됩니다.
 
 ---
 

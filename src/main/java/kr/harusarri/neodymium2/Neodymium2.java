@@ -159,7 +159,7 @@ public final class Neodymium2 implements ModInitializer {
         if(regionProtects(entity))return true;
         if(entity.hasCustomName())OutsideSpawnAndDensity.recordBlockedNametagBypass(entity);
         if(entity instanceof net.minecraft.world.entity.npc.villager.Villager)return VillagerLobotomy.enabled();
-        if(entity instanceof Mob mob&&OutsideEntityOptimizer.isInteractiveOrBreeding(mob))return true;
+        if(entity instanceof Mob mob&&(OutsideEntityOptimizer.isInteractiveOrBreeding(mob)||OutsideEntityOptimizer.isActiveMobFarmMonster(mob)))return true;
         return false;
     }
     public static void removed(RegionPolicies.Ref ref){

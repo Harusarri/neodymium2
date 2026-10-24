@@ -133,6 +133,28 @@ public final class OutsideEntityOptimizer {
     }
 
     /**
+     * Paper / Low-Level Mob Farm Monster Activation:
+     * Keeps monsters (Enemy) in the player's active mob-farm column (<= 48m horizontal, <= 128m 3D,
+     * excluding deep caves y < 32 far below the player) active in EAR so water canals, drop chutes,
+     * trapdoor walk-off, and despawn timers function reliably without waking deep underground caves.
+     */
+    public static boolean isActiveMobFarmMonster(Mob mob) {
+        if (!(mob instanceof net.minecraft.world.entity.monster.Enemy) || !enabled()) return false;
+        if (!(mob.level() instanceof ServerLevel level) || level.players().isEmpty()) return false;
+        double horizDistSq = PlayerSpatialGrid.horizDistSqToNearestPlayer(level, mob.getX(), mob.getZ());
+        if (horizDistSq > 48.0 * 48.0) return false;
+        double dist3dSq = PlayerSpatialGrid.distSqToNearestPlayer(level, mob.getX(), mob.getY(), mob.getZ());
+        if (dist3dSq > 128.0 * 128.0) return false;
+        if (level.dimension() == net.minecraft.world.level.Level.OVERWORLD && mob.getBlockY() < 32) {
+            int playerY = PlayerSpatialGrid.nearestPlayerBlockY(level, mob.getX(), mob.getZ());
+            if (playerY - mob.getBlockY() > 56) {
+                return false;
+            }
+        }
+        return OutsideWorldOptimizer.msptGear(level.getServer()) < 2;
+    }
+
+    /**
      * Pufferfish DAB (Dynamic Activation of Brain & GoalSelector):
      * Scales AI tick interval by distance-squared gradient from the nearest player:
      * interval = clamp(base + floor(distSq / 64.0), 4, 20)
@@ -146,12 +168,19 @@ public final class OutsideEntityOptimizer {
         }
         if (isCombatOrInteractive(mob)) return false;
         if (mob.isOnPortalCooldown() || (mob.portalProcess != null && mob.portalProcess.isInsidePortalThisTick())) return false;
+        if (mob instanceof ActivationEntity ae && ae.servercore$isInactive()) return false;
 
         int tick = (int) level.getGameTime();
         int density = OutsideSpawnAndDensity.recordAndGetChunkDensity(mob, tick);
         int interval;
         if (density > OutsideSpawnAndDensity.OVERCROWD_THRESHOLD) {
             interval = 20;
+        } else if (mob instanceof net.minecraft.world.entity.monster.Enemy && isActiveMobFarmMonster(mob)) {
+            if (!mob.getNavigation().isDone() || mob.isInWater() || mob.isInLava()) {
+                return false;
+            }
+            int gear = OutsideWorldOptimizer.msptGear(level.getServer());
+            interval = gear == 0 ? 2 : 4;
         } else {
             double distSq = Math.min(16384.0, PlayerSpatialGrid.distSqToNearestPlayer(level, mob.getX(), mob.getY(), mob.getZ()));
             int gear = OutsideWorldOptimizer.msptGear(level.getServer());
