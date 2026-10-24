@@ -4,6 +4,7 @@
   "version": "2.0.0-rc.5+26.3",
   "name": "네오디윰 2 (Neodymium 2)",
   "description": "Region-aware ServerCore policies, lazy-chunk projectile cleanup and villager Brain maintenance with live trade prices and vanilla hero gifts.",
+  "icon": "assets/neodymium2/icon.png",
   "environment": "server",
   "entrypoints": {
     "main": [

@@ -1,4 +1,8 @@
-# Neodymium 2
+<div align="center">
+  <img src="src/main/resources/assets/neodymium2/icon.png" alt="Neodymium (60 Nd) Logo" width="160" height="160" />
+  <h1>Neodymium 2</h1>
+  <p><strong>Minecraft 26.3 (Fabric + ServerCore) 구역 인지형 서버 틱 최적화 모드</strong></p>
+</div>
 
 > [!NOTE]
 > **AI Utilization Disclosure (AI 사용 명시)**  
@@ -74,6 +78,21 @@ boolean entityProtected = NeodymiumApi.isProtected(entity);
 boolean blockProtected  = NeodymiumApi.isProtectedBlock(level, blockPos);
 boolean chunkProtected  = NeodymiumApi.isProtectedChunk(level, chunkX, chunkZ);
 ```
+
+---
+
+## 참조 프로젝트 및 출처 (Credits & References)
+
+**Neodymium 2**의 구역 외부 최적화 모듈들은 아래 오픈소스 마인크래프트 서버 및 최적화 프로젝트들의 설계 아이디어와 알고리즘을 참조하여, **보호 구역 내부는 100% 바닐라를 유지하고 외부 야생 영역에만 선택적으로 적용**되도록 재설계·구현되었습니다.
+
+* **[PaperMC / Paper](https://github.com/PaperMC/Paper)** — 비전투 엔티티 A* 길찾기 실패 백오프(Pathfinding Backoff), 3D 구체 디스폰 반경 사전 필터링(3D Sphere Despawn Pre-Filter), 폭발 가시성 레이캐스트 캐시(`ServerExplosion.getSeenPercent`), 발전과제 트리거 최적화 개념 참조
+* **[Pufferfish](https://github.com/pufferfish-gg/Pufferfish)** — 거리 제곱 비례 동적 AI 틱 감속(**DAB**, Dynamic Activation of Brain & GoalSelector) 및 원거리 투사체 처리 아이디어 참조
+* **[Purpur](https://github.com/PurpurMC/Purpur)** — 갇힌 주민 AI 생략(`Villager Lobotomization`) 및 거래 재입고 유지 개념 참조
+* **[Gale](https://github.com/GaleMC/Gale) / [Leaf](https://github.com/Winds-Studio/Leaf) / [Petal](https://github.com/Bloom-host/Petal)** — 시야 레이캐스트(`Sensing`) 캐시 유지, `Brain` 메모리 모듈 평탄 배열 직접 인덱싱(Flat-Array Memory Indexing), 정지 엔티티 트래커 더티 게이트(Stationary Tracker Gate) 아이디어 참조
+* **[ServerCore](https://github.com/Wesley1808/ServerCore)** (`Wesley1808`) — Fabric 환경의 엔티티 활성화 범위(Activation Range, EAR) 및 기본 설정 프레임워크 연동 기반
+* **[Lithium](https://github.com/CaffeineMC/lithium)** (`CaffeineMC`) — `Brain` 실행 태스크 캐시 호환(`BrainTaskCache`) 및 `<lithium_sleeping>` 휴면 블록 엔티티 Active-Set 압축 구조 참조
+* **[Fabric Carpet](https://github.com/gnembon/fabric-carpet) / [Carpet-TIS-Addition](https://github.com/TISUnion/Carpet-TIS-Addition)** — `lagFreeSpawning` (고속 AABB 충돌 판정 및 Mob 인스턴스 프리쿠킹 캐시), 가짜 플레이어(`EntityPlayerMPFake`) 발전과제 조건 생략, 비활성 `MicroTiming` 로거 단락 호환성 참조
+* **[Yet Another World Protector (YAWP)](https://github.com/Z0rdak/Yet-Another-World-Protector)** — 선택적 보호 구역 연동 및 `FlagEvaluator` 위치 캐시 대상
 
 ---
 

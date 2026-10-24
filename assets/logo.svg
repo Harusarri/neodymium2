@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="220" height="220">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0f172a"/>
+      <stop offset="50%" stop-color="#1e1b4b"/>
+      <stop offset="100%" stop-color="#090d16"/>
+    </linearGradient>
+    <linearGradient id="borderGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#38bdf8"/>
+      <stop offset="50%" stop-color="#818cf8"/>
+      <stop offset="100%" stop-color="#c084fc"/>
+    </linearGradient>
+    <linearGradient id="textGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#f8fafc"/>
+      <stop offset="100%" stop-color="#cbd5e1"/>
+    </linearGradient>
+    <filter id="glow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="4" stdDeviation="8" flood-color="#38bdf8" flood-opacity="0.25"/>
+    </filter>
+  </defs>
+
+  <!-- Outer Card -->
+  <rect x="16" y="16" width="480" height="480" rx="56" fill="url(#bgGrad)" stroke="url(#borderGrad)" stroke-width="14"/>
+  <!-- Inner Subtle Frame -->
+  <rect x="38" y="38" width="436" height="436" rx="38" fill="none" stroke="#38bdf8" stroke-opacity="0.18" stroke-width="2"/>
+
+  <!-- Atomic Number (Top Left) -->
+  <text x="64" y="112" font-family="'Segoe UI', 'Inter', Arial, sans-serif" font-size="64" font-weight="800" fill="#38bdf8">60</text>
+
+  <!-- Electron Shells / Configuration (Top Right) -->
+  <text x="446" y="88" font-family="'Consolas', 'Courier New', monospace" font-size="24" font-weight="600" fill="#94a3b8" text-anchor="end">[Xe] 4f⁴ 6s²</text>
+  <text x="446" y="118" font-family="'Consolas', 'Courier New', monospace" font-size="19" font-weight="500" fill="#64748b" text-anchor="end">2·8·18·22·8·2</text>
+
+  <!-- Element Symbol (Center) -->
+  <text x="256" y="302" font-family="'Segoe UI', 'Inter', Arial, sans-serif" font-size="210" font-weight="900" fill="url(#textGrad)" text-anchor="middle" letter-spacing="-4" filter="url(#glow)">Nd</text>
+
+  <!-- Element Name -->
+  <text x="256" y="378" font-family="'Segoe UI', 'Inter', Arial, sans-serif" font-size="38" font-weight="700" fill="#e2e8f0" text-anchor="middle" letter-spacing="5">NEODYMIUM</text>
+
+  <!-- Atomic Mass & Version Badge -->
+  <text x="256" y="432" font-family="'Consolas', 'Courier New', monospace" font-size="28" font-weight="600" fill="#818cf8" text-anchor="middle">144.242</text>
+</svg>
