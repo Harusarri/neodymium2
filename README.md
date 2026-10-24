@@ -4,6 +4,10 @@
   <p><strong>Selectable server optimization for Minecraft 26.3 Fabric — you choose where to keep 100% vanilla mechanics and where to optimize for TPS.</strong></p>
 </div>
 
+> [!NOTE]
+> **AI-Generated Project ("AI Slop" Disclosure)**  
+> This mod's code, optimization logic, tests, and documentation were written by an AI coding assistant (**Google Antigravity**). Use at your own discretion.
+
 ---
 
 ## What It Does
