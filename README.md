@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="src/main/resources/assets/neodymium2/icon.png" alt="Neodymium (60 Nd) Logo" width="160" height="160" />
+  <img src="src/main/resources/assets/neodymium2/icon.png?v=rc8" alt="Neodymium (60 Nd) Logo" width="180" height="180" />
   <h1>Neodymium 2</h1>
   <p><strong>Region-Aware Server Tick Optimization Mod for Minecraft 26.3 (Fabric + ServerCore)</strong></p>
   <p><strong>Minecraft 26.3 (Fabric + ServerCore) 구역 인지형 서버 틱 최적화 모드</strong></p>
