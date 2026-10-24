@@ -18,6 +18,8 @@ public final class PlayerSpatialGrid {
     private static double[] px = new double[64];
     private static double[] py = new double[64];
     private static double[] pz = new double[64];
+    private static int[] monsterCounts = new int[64];
+    private static int[] tickSpawnedMonsters = new int[64];
     private static ItemStack[] mainHand = new ItemStack[64];
     private static ItemStack[] offHand = new ItemStack[64];
 
@@ -36,6 +38,8 @@ public final class PlayerSpatialGrid {
             px = new double[cap];
             py = new double[cap];
             pz = new double[cap];
+            monsterCounts = new int[cap];
+            tickSpawnedMonsters = new int[cap];
             mainHand = new ItemStack[cap];
             offHand = new ItemStack[cap];
         }
@@ -46,6 +50,8 @@ public final class PlayerSpatialGrid {
                 px[n] = p.getX();
                 py[n] = p.getY();
                 pz[n] = p.getZ();
+                monsterCounts[n] = 0;
+                tickSpawnedMonsters[n] = 0;
                 mainHand[n] = p.getMainHandItem();
                 offHand[n] = p.getOffhandItem();
                 n++;
@@ -54,6 +60,71 @@ public final class PlayerSpatialGrid {
         count = n;
         cachedLevel = level;
         cachedTick = tick;
+    }
+
+    public static void recordMonsterNearNearestPlayer(ServerLevel level, double x, double y, double z) {
+        ensureUpdated(level);
+        int n = count;
+        if (n == 0) return;
+        double[] xs = px, ys = py, zs = pz;
+        double best = Double.MAX_VALUE;
+        int bestIdx = -1;
+        for (int i = 0; i < n; i++) {
+            double dx = xs[i] - x;
+            double dy = ys[i] - y;
+            double dz = zs[i] - z;
+            double d2 = dx * dx + dy * dy + dz * dz;
+            if (d2 < best) {
+                best = d2;
+                bestIdx = i;
+            }
+        }
+        if (bestIdx >= 0 && best <= 128.0 * 128.0) {
+            monsterCounts[bestIdx]++;
+        }
+    }
+
+    public static void recordOutsideMonsterSpawned(ServerLevel level, double x, double z) {
+        ensureUpdated(level);
+        int n = count;
+        if (n == 0) return;
+        double[] xs = px, zs = pz;
+        double best = Double.MAX_VALUE;
+        int bestIdx = -1;
+        for (int i = 0; i < n; i++) {
+            double dx = xs[i] - x;
+            double dz = zs[i] - z;
+            double d2 = dx * dx + dz * dz;
+            if (d2 < best) {
+                best = d2;
+                bestIdx = i;
+            }
+        }
+        if (bestIdx >= 0) {
+            monsterCounts[bestIdx]++;
+            tickSpawnedMonsters[bestIdx]++;
+        }
+    }
+
+    public static boolean canSpawnOutsideMonsterNear(ServerLevel level, double x, double z, int maxLiveMonsters, int maxPerTickMonsters) {
+        ensureUpdated(level);
+        int n = count;
+        if (n == 0) return false;
+        double[] xs = px, zs = pz;
+        double best = Double.MAX_VALUE;
+        int bestIdx = -1;
+        for (int i = 0; i < n; i++) {
+            double dx = xs[i] - x;
+            double dz = zs[i] - z;
+            double d2 = dx * dx + dz * dz;
+            if (d2 < best) {
+                best = d2;
+                bestIdx = i;
+            }
+        }
+        return bestIdx >= 0
+            && monsterCounts[bestIdx] < maxLiveMonsters
+            && tickSpawnedMonsters[bestIdx] < maxPerTickMonsters;
     }
 
     public static boolean hasFoodHoldingPlayerWithin(ServerLevel level, Animal animal, double maxDistSq) {
