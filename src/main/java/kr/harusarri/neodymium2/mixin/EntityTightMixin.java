@@ -1,5 +1,6 @@
 package kr.harusarri.neodymium2.mixin;
 
+import kr.harusarri.neodymium2.OutsideEntityOptimizer;
 import kr.harusarri.neodymium2.OutsideWorldOptimizer;
 import kr.harusarri.neodymium2.core.EntityFastStateAccess;
 import kr.harusarri.neodymium2.core.FastEntityTagSet;
@@ -90,6 +91,10 @@ public abstract class EntityTightMixin implements EntityFastStateAccess {
 
     @Inject(method = "move", at = @At("HEAD"), cancellable = true)
     private void neo$shortCircuitRestingGravityMove(MoverType type, Vec3 movement, CallbackInfo ci) {
+        if ((type == MoverType.PISTON || type == MoverType.SHULKER_BOX || type == MoverType.SHULKER)
+            && (Object) this instanceof Mob pushedMob) {
+            OutsideEntityOptimizer.wakeOnPlayerInteract(pushedMob);
+        }
         if (type == MoverType.SELF
             && (Object) this instanceof Mob mob
             && this.onGround

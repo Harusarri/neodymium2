@@ -1,5 +1,6 @@
 package kr.harusarri.neodymium2.mixin;
 
+import kr.harusarri.neodymium2.BrainTaskCache;
 import kr.harusarri.neodymium2.OutsideWorldOptimizer;
 import kr.harusarri.neodymium2.core.MemoryTypeIndexAccess;
 import net.minecraft.world.entity.ai.Brain;
@@ -20,7 +21,8 @@ import java.util.Map;
  * Gale / Leaf Flat-Array Direct Memory Indexing for Brain:
  * Replaces HashMap.get(MemoryModuleType) pointer-chasing in Brain.getMemorySlotIfPresent
  * and HashMap$Values iterator allocation in Brain.forgetOutdatedMemories / clearMemories
- * with 100% mathematically identical O(1) flat array lookups.
+ * with 100% mathematically identical O(1) flat array lookups while preserving Lithium's
+ * MemoryModificationCounter (memoryModCount) invalidation on slot expiry/clearing.
  */
 @Mixin(value = Brain.class, priority = 900)
 public abstract class BrainTightMixin {
@@ -79,8 +81,18 @@ public abstract class BrainTightMixin {
     private void neo$fastForgetOutdatedMemories(CallbackInfo ci) {
         if (OutsideWorldOptimizer.enabled() && this.neo$compactCount == this.memories.size()) {
             MemorySlot<?>[] slots = this.neo$compactSlots;
+            boolean expiredAny = false;
             for (int i = 0, n = this.neo$compactCount; i < n; i++) {
-                slots[i].tick();
+                MemorySlot<?> slot = slots[i];
+                if (slot.canExpire()) {
+                    slot.tick();
+                    if (!slot.hasValue()) {
+                        expiredAny = true;
+                    }
+                }
+            }
+            if (expiredAny) {
+                BrainTaskCache.notifyMemoryModified((Brain<?>) (Object) this);
             }
             ci.cancel();
         }
@@ -90,8 +102,16 @@ public abstract class BrainTightMixin {
     private void neo$fastClearMemories(CallbackInfo ci) {
         if (OutsideWorldOptimizer.enabled() && this.neo$compactCount == this.memories.size()) {
             MemorySlot<?>[] slots = this.neo$compactSlots;
+            boolean clearedAny = false;
             for (int i = 0, n = this.neo$compactCount; i < n; i++) {
-                slots[i].clear();
+                MemorySlot<?> slot = slots[i];
+                if (slot.hasValue()) {
+                    clearedAny = true;
+                }
+                slot.clear();
+            }
+            if (clearedAny) {
+                BrainTaskCache.notifyMemoryModified((Brain<?>) (Object) this);
             }
             ci.cancel();
         }

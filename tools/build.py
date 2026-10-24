@@ -6,7 +6,7 @@ if out.exists(): shutil.rmtree(out)
 out.mkdir(parents=True)
 result=subprocess.run(['javac','--release','25','-encoding','UTF-8','-proc:none','-cp',(root/'build/compile-classpath.txt').read_text().strip(),'-d',str(out),*map(str,sorted((root/'src/main/java').rglob('*.java')))])
 if result.returncode: raise SystemExit(result.returncode)
-jar = root/'release/neodymium2-2.0.0-rc.5+26.3.jar'
+jar = root/'release/neodymium2-2.0.0-rc.6+26.3.jar'
 with zipfile.ZipFile(jar,'w',compression=zipfile.ZIP_DEFLATED) as z:
  for directory in (out,root/'src/main/resources'):
   for f in sorted(directory.rglob('*')):
