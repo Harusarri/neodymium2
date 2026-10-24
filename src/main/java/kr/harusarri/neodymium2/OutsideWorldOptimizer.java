@@ -202,6 +202,7 @@ public final class OutsideWorldOptimizer {
         }
         if (entity instanceof LivingEntity living && living.hurtTime > 0) return false;
         if (entity.getDeltaMovement().horizontalDistanceSqr() > 1.0E-4) return false;
+        if (entity instanceof Mob mob && OutsideEntityOptimizer.isActiveMobFarmMonster(mob)) return false;
         if (Neodymium2.regionProtects(entity)) {
             protectedFluidScans++;
             return false;
@@ -229,6 +230,9 @@ public final class OutsideWorldOptimizer {
             return false;
         }
         if (level.getBlockState(supportPos) != supportState) {
+            return false;
+        }
+        if (OutsideEntityOptimizer.isActiveMobFarmMonster(mob)) {
             return false;
         }
         if (Neodymium2.regionProtects(mob)) {

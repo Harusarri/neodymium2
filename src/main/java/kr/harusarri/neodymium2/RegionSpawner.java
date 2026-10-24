@@ -42,6 +42,7 @@ public final class RegionSpawner {
     private static boolean currentChunkProtected;
     private static boolean currentChunkStructureEmpty;
     private static LevelChunk currentOutsideChunk;
+    private static MobCategory currentOutsideCategory;
     private static long quotaTick = Long.MIN_VALUE;
     private static int quotaUsed = 0;
 
@@ -193,8 +194,30 @@ public final class RegionSpawner {
         if (entity instanceof Mob) {
             localMobCapCalculator.addMob(chunk.getPos(), category);
         }
+        if (category == MobCategory.MONSTER) {
+            PlayerSpatialGrid.recordMonsterNearNearestPlayer(level, entity.getX(), entity.getY(), entity.getZ());
+        }
         mobCategoryCounts.addTo(category, 1);
         return true;
+    }
+
+    private static int maxOutsideMonstersPerPlayer(ServerLevel level, double x, double z, int gear) {
+        int playerCount = level.players().size();
+        if (playerCount >= 30 || gear >= 2) {
+            return 12;
+        }
+        if (playerCount >= 15 || gear == 1) {
+            return 16;
+        }
+        if (level.dimension() == net.minecraft.world.level.Level.OVERWORLD) {
+            int playerY = PlayerSpatialGrid.nearestPlayerBlockY(level, x, z);
+            if (playerY >= 56) {
+                // Overworld surface/sky: y < 32 deep caves (~46 mobs) are culled, leaving 24 surface/farm slots
+                return 24;
+            }
+        }
+        // Nether, End, or Overworld underground caves: caves are not culled, allow 36 monsters
+        return 36;
     }
 
     public static void onFastLocalMobCapHit() {
@@ -218,6 +241,7 @@ public final class RegionSpawner {
             currentChunkProtected = true;
             currentChunkStructureEmpty = false;
             currentOutsideChunk = null;
+            currentOutsideCategory = null;
             return true;
         }
         currentChunkProtected = false;
@@ -234,6 +258,7 @@ public final class RegionSpawner {
             currentChunkSpawns = -1;
             currentChunkStructureEmpty = false;
             currentOutsideChunk = null;
+            currentOutsideCategory = null;
             return false;
         }
         double centerX = (cx << 4) + 8.0, centerZ = (cz << 4) + 8.0;
@@ -243,36 +268,67 @@ public final class RegionSpawner {
         double maxSpawnHorizontalRadius = (playerCount >= 15 || gear > 0)
             ? 72.0
             : Math.min(136.0, (simDist + 1) * 16.0 + 8.0);
-        boolean playerWithinDespawnRange = PlayerSpatialGrid.hasPlayerWithinHorizontal(level, centerX, centerZ, maxSpawnHorizontalRadius * maxSpawnHorizontalRadius);
-        if (!playerWithinDespawnRange) {
+        double horizDistSq = PlayerSpatialGrid.horizDistSqToNearestPlayer(level, centerX, centerZ);
+        if (horizDistSq > maxSpawnHorizontalRadius * maxSpawnHorizontalRadius) {
             outsideSkippedChunks++;
             currentChunkSpawns = -1;
             currentChunkStructureEmpty = false;
             currentOutsideChunk = null;
+            currentOutsideCategory = null;
             return false;
         }
-        var settings = Neodymium2.snapshot().settings();
-        int max = settings.outsideSpawnMaxInterval();
-        int base = Math.min(max, settings.outsideSpawnBaseInterval() << gear);
-        long hash = cx * 0x9E3779B97F4A7C15L ^ cz * 0xBF58476D1CE4E5B9L;
-        int slot = (int) ((hash >>> 32) & TABLE_MASK);
-        long tag = (1L << 62) | ((cx & 0x1FFFFFFFL) << 31) | ((cz & 0x1FFFFFFFL) << 3);
-        long entry = CHUNK_STREAKS[slot];
-        int streak = (entry & ~7L) == tag ? (int) (entry & 7L) : 0;
-        int interval = Math.min(max, base << Math.min(streak, 3));
-        long phase = Math.floorMod((hash & 0x7FFFFFFFL) + gameTime, interval);
-        if (phase != 0) {
+        boolean includeNonMonsters = (playerCount >= 15 || gear > 0)
+            ? (gameTime % 20L) == 0L
+            : (gameTime & 3L) == 0L;
+        if (!includeNonMonsters
+            && !PlayerSpatialGrid.canSpawnOutsideMonsterNear(
+                level, centerX, centerZ, maxOutsideMonstersPerPlayer(level, centerX, centerZ, gear), 4
+            )) {
             outsideSkippedChunks++;
             currentChunkSpawns = -1;
             currentChunkStructureEmpty = false;
             currentOutsideChunk = null;
+            currentOutsideCategory = null;
             return false;
+        }
+        long hash = cx * 0x9E3779B97F4A7C15L ^ cz * 0xBF58476D1CE4E5B9L;
+        // Active mob-farm horizontal column (<= 48 blocks from a player):
+        // Run every 2 ticks under normal MSPT & low pop without 16-tick empty-chunk backoff so
+        // flushing/fountain mob towers recover promptly after water-flushing cycles.
+        if (horizDistSq <= 48.0 * 48.0 && gear == 0 && playerCount < 20) {
+            if (((hash + gameTime) & 1L) != 0L) {
+                outsideSkippedChunks++;
+                currentChunkSpawns = -1;
+                currentChunkStructureEmpty = false;
+                currentOutsideChunk = null;
+                currentOutsideCategory = null;
+                return false;
+            }
+        } else {
+            var settings = Neodymium2.snapshot().settings();
+            int max = settings.outsideSpawnMaxInterval();
+            int base = Math.min(max, settings.outsideSpawnBaseInterval() << gear);
+            int slot = (int) ((hash >>> 32) & TABLE_MASK);
+            long tag = (1L << 62) | ((cx & 0x1FFFFFFFL) << 31) | ((cz & 0x1FFFFFFFL) << 3);
+            long entry = CHUNK_STREAKS[slot];
+            int streak = (entry & ~7L) == tag ? (int) (entry & 7L) : 0;
+            int interval = Math.min(max, base << Math.min(streak, 3));
+            long phase = Math.floorMod((hash & 0x7FFFFFFFL) + gameTime, interval);
+            if (phase != 0) {
+                outsideSkippedChunks++;
+                currentChunkSpawns = -1;
+                currentChunkStructureEmpty = false;
+                currentOutsideChunk = null;
+                currentOutsideCategory = null;
+                return false;
+            }
         }
         quotaUsed++;
         outsideEvaluatedChunks++;
         currentChunkSpawns = 0;
         currentChunkStructureEmpty = chunk.getAllReferences().isEmpty();
         currentOutsideChunk = chunk;
+        currentOutsideCategory = null;
         return true;
     }
 
@@ -289,15 +345,42 @@ public final class RegionSpawner {
     }
 
     public static java.util.List<MobCategory> filterOutsideCategories(ServerLevel level, java.util.List<MobCategory> categories) {
-        if (currentChunkProtected || currentChunkSpawns < 0 || (level.getGameTime() % 20L) == 0L) {
+        if (currentChunkProtected || currentChunkSpawns < 0 || currentOutsideChunk == null) {
             return categories;
         }
+        int gear = OutsideWorldOptimizer.msptGear(level.getServer());
+        int playerCount = level.players().size();
+        long gameTime = level.getGameTime();
+        boolean includeNonMonsters = (playerCount >= 15 || gear > 0)
+            ? (gameTime % 20L) == 0L
+            : (gameTime & 3L) == 0L;
+        double centerX = (currentOutsideChunk.getPos().x() << 4) + 8.0;
+        double centerZ = (currentOutsideChunk.getPos().z() << 4) + 8.0;
+        boolean canSpawnMonster = PlayerSpatialGrid.canSpawnOutsideMonsterNear(
+            level, centerX, centerZ, maxOutsideMonstersPerPlayer(level, centerX, centerZ, gear), 4
+        );
+        if (includeNonMonsters && canSpawnMonster) {
+            return categories;
+        }
+        if (!includeNonMonsters && canSpawnMonster) {
+            for (int i = 0, n = categories.size(); i < n; i++) {
+                if (categories.get(i) == MobCategory.MONSTER) {
+                    return java.util.List.of(MobCategory.MONSTER);
+                }
+            }
+            return java.util.List.of();
+        }
+        if (!includeNonMonsters) {
+            return java.util.List.of();
+        }
+        java.util.List<MobCategory> filtered = new java.util.ArrayList<>(categories.size());
         for (int i = 0, n = categories.size(); i < n; i++) {
-            if (categories.get(i) == MobCategory.MONSTER) {
-                return java.util.List.of(MobCategory.MONSTER);
+            MobCategory cat = categories.get(i);
+            if (cat != MobCategory.MONSTER) {
+                filtered.add(cat);
             }
         }
-        return java.util.List.of();
+        return filtered;
     }
 
     private static boolean isSlimeChunk(ServerLevel level, LevelChunk chunk) {
@@ -318,12 +401,15 @@ public final class RegionSpawner {
             return false;
         }
         var state = chunk.getBlockState(pos);
-        if (state.isRedstoneConductor(chunk, pos)) return false;
-        if (state.getFluidState().isEmpty()) {
-            var below = chunk.getBlockState(pos.below());
-            if (below.isAir() || !below.getFluidState().isEmpty()) return false;
+        if (!state.getFluidState().isEmpty() || state.isRedstoneConductor(chunk, pos) || !state.getCollisionShape(chunk, pos).isEmpty()) {
+            return false;
         }
-        if (overworld && !(y < 40 && slimeChunk) && state.getFluidState().isEmpty()) {
+        BlockPos belowPos = pos.below();
+        var below = chunk.getBlockState(belowPos);
+        if (below.isAir() || !below.getFluidState().isEmpty() || !below.isFaceSturdy(chunk, belowPos, net.minecraft.core.Direction.UP)) {
+            return false;
+        }
+        if (overworld && !(y < 40 && slimeChunk)) {
             if (level.getBrightness(net.minecraft.world.level.LightLayer.BLOCK, pos) > 0) return false;
             if (level.isBrightOutside() && level.getBrightness(net.minecraft.world.level.LightLayer.SKY, pos) > 7) return false;
         }
@@ -331,51 +417,55 @@ public final class RegionSpawner {
     }
 
     /**
-     * Paper-style Low-Level Mob Farm Floor Resolver for CHUNK_OUTSIDE:
-     * Because outside chunks run on a 4-tick strided cadence, a single uniform random Y in [-64..topY]
-     * misses a player's 1-3 story dark-room mob farm >98% of the time (wasting picks on solid underground
-     * stone or open daylight sky and triggering the 16-tick empty-chunk backoff).
-     * When the initial random position fails in a chunk within 64 blocks horizontally of a player,
-     * performs up to 8 ultra-fast O(1) section/light probes in the player's active vertical band
-     * (y >= 32 when on surface/sky, or playerY ± 48 when underground) so dark-room mob farms reliably
-     * locate their spawning floor without ticking extra chunks or spawning deep underground cave mobs.
+     * Heightmap-Preserving Uniform Re-Roll for CHUNK_OUTSIDE:
+     * Compensates for the 2-tick cadence and y < 32 deep-cave culling in active Overworld columns (<= 48m)
+     * with at most ONE additional uniform random Y sample in [minRollY .. topY] (with ZERO downward
+     * floor-snapping), strictly preserving Vanilla's heightmap (1 / topY) probability distribution
+     * while keeping aquatic Drowned/Guardian water positions untouched.
      */
     public static BlockPos resolveOutsideSpawnPos(net.minecraft.world.level.Level rawLevel, LevelChunk chunk, MobCategory category, BlockPos pos) {
+        currentOutsideCategory = category;
         if (currentChunkSpawns < 0 || category != MobCategory.MONSTER || !(rawLevel instanceof ServerLevel level)) {
+            return pos;
+        }
+        if (level.dimension() != net.minecraft.world.level.Level.OVERWORLD) {
             return pos;
         }
         int cx = chunk.getPos().x(), cz = chunk.getPos().z();
         double centerX = (cx << 4) + 8.0, centerZ = (cz << 4) + 8.0;
         int playerY = PlayerSpatialGrid.nearestPlayerBlockY(level, centerX, centerZ);
         if (playerY == Integer.MIN_VALUE) return pos;
-        boolean overworld = level.dimension() == net.minecraft.world.level.Level.OVERWORLD;
-        boolean slimeChunk = overworld && isSlimeChunk(level, chunk);
+        // Preserve legitimate water positions for Drowned & Guardians:
+        // If pos is in water and either above sea level (e.g. sky river Drowned farm) or in open water
+        // without a sky mob tower built above it (colTopY <= seaLevel + 4), keep pos untouched.
+        if (chunk.getBlockState(pos).getFluidState().is(net.minecraft.tags.FluidTags.WATER)) {
+            int colTopY = chunk.getHeight(net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, pos.getX(), pos.getZ());
+            if (pos.getY() >= level.getSeaLevel() || colTopY <= level.getSeaLevel() + 4) {
+                return pos;
+            }
+        }
+        boolean slimeChunk = isSlimeChunk(level, chunk);
         if (isCandidateOutsideMonsterFloor(level, chunk, pos, playerY, slimeChunk)) {
             return pos;
         }
-        if (OutsideWorldOptimizer.msptGear(level.getServer()) >= 2) {
+        if (OutsideWorldOptimizer.msptGear(level.getServer()) >= 1) {
             return pos;
         }
-        if (PlayerSpatialGrid.horizDistSqToNearestPlayer(level, centerX, centerZ) > 64.0 * 64.0) {
+        if (PlayerSpatialGrid.horizDistSqToNearestPlayer(level, centerX, centerZ) > 48.0 * 48.0) {
             return pos;
         }
-        int minLevelY = level.getMinY() + 1;
-        int minBandY = (overworld && playerY >= 48)
-            ? Math.max(32, Math.max(minLevelY, playerY - 124))
-            : Math.max(minLevelY, playerY - 48);
         var rand = level.getRandom();
-        int baseX = cx << 4, baseZ = cz << 4;
-        for (int i = 0; i < 8; i++) {
-            int rx = baseX + rand.nextInt(16);
-            int rz = baseZ + rand.nextInt(16);
-            int topY = chunk.getHeight(net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, rx, rz) + 1;
-            int maxBandY = Math.min(topY, playerY + 124);
-            if (maxBandY <= minBandY) continue;
-            int ry = net.minecraft.util.Mth.randomBetweenInclusive(rand, minBandY, maxBandY);
-            BlockPos cand = new BlockPos(rx, ry, rz);
-            if (isCandidateOutsideMonsterFloor(level, chunk, cand, playerY, slimeChunk)) {
-                return cand;
-            }
+        int rx = (cx << 4) + rand.nextInt(16);
+        int rz = (cz << 4) + rand.nextInt(16);
+        int topY = chunk.getHeight(net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, rx, rz) + 1;
+        int minRollY = (playerY >= 48 && !slimeChunk) ? 0 : (level.getMinY() + 1);
+        if (topY <= minRollY) {
+            return pos;
+        }
+        int ry = net.minecraft.util.Mth.randomBetweenInclusive(rand, minRollY, topY);
+        BlockPos candidate = new BlockPos(rx, ry, rz);
+        if (isCandidateOutsideMonsterFloor(level, chunk, candidate, playerY, slimeChunk)) {
+            return candidate;
         }
         return pos;
     }
@@ -391,6 +481,13 @@ public final class RegionSpawner {
     public static boolean shouldRejectOutsideSpawnPos(ServerLevel level, BlockPos pos, double horizontalDistSqr) {
         if (currentChunkSpawns < 0) return false; // Protected chunk -> 100% pure Vanilla
         int gear = OutsideWorldOptimizer.msptGear(level.getServer());
+        boolean isMonsterCategory = currentOutsideCategory == null || currentOutsideCategory == MobCategory.MONSTER;
+        if (isMonsterCategory && !PlayerSpatialGrid.canSpawnOutsideMonsterNear(
+            level, pos.getX() + 0.5, pos.getZ() + 0.5, maxOutsideMonstersPerPlayer(level, pos.getX() + 0.5, pos.getZ() + 0.5, gear), 4
+        )) {
+            preFilteredPositions++;
+            return true;
+        }
         boolean highPop = level.players().size() >= 15 || gear > 0;
         int simDist = level.getServer() != null && level.getServer().getPlayerList() != null
             ? level.getServer().getPlayerList().getSimulationDistance()
@@ -402,11 +499,14 @@ public final class RegionSpawner {
             preFilteredPositions++;
             return true;
         }
-        if (level.dimension() == net.minecraft.world.level.Level.OVERWORLD && pos.getY() < 32) {
+        if (isMonsterCategory && level.dimension() == net.minecraft.world.level.Level.OVERWORLD && pos.getY() < 32) {
             int playerY = PlayerSpatialGrid.nearestPlayerBlockY(level, pos.getX() + 0.5, pos.getZ() + 0.5);
             if (playerY != Integer.MIN_VALUE && playerY - pos.getY() > (gear >= 2 ? 48 : 56)) {
                 LevelChunk chunk = currentOutsideChunk;
-                if (chunk == null || !isSlimeChunk(level, chunk)) {
+                boolean deepOceanWater = chunk != null
+                    && chunk.getBlockState(pos).getFluidState().is(net.minecraft.tags.FluidTags.WATER)
+                    && chunk.getHeight(net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, pos.getX(), pos.getZ()) <= level.getSeaLevel() + 4;
+                if (!deepOceanWater && (chunk == null || !isSlimeChunk(level, chunk))) {
                     preFilteredPositions++;
                     return true;
                 }
@@ -417,7 +517,19 @@ public final class RegionSpawner {
 
     public static void onMobSpawned() {
         spawnedMobs++;
-        if (currentChunkSpawns >= 0) currentChunkSpawns++;
+        if (currentChunkSpawns >= 0) {
+            currentChunkSpawns++;
+            if (currentOutsideCategory == null || currentOutsideCategory == MobCategory.MONSTER) {
+                LevelChunk chunk = currentOutsideChunk;
+                if (chunk != null && chunk.getLevel() instanceof ServerLevel level) {
+                    PlayerSpatialGrid.recordOutsideMonsterSpawned(
+                        level,
+                        (chunk.getPos().x() << 4) + 8.0,
+                        (chunk.getPos().z() << 4) + 8.0
+                    );
+                }
+            }
+        }
         OutsideSpawnAndDensity.onMobSpawned();
     }
 
@@ -427,6 +539,7 @@ public final class RegionSpawner {
         currentChunkProtected = false;
         currentChunkStructureEmpty = false;
         currentOutsideChunk = null;
+        currentOutsideCategory = null;
         if (spawned < 0) return;
         int cx = chunk.getPos().x(), cz = chunk.getPos().z();
         long hash = cx * 0x9E3779B97F4A7C15L ^ cz * 0xBF58476D1CE4E5B9L;

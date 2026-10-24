@@ -20,10 +20,10 @@ public abstract class MobTightMixin {
         if (OutsideEntityOptimizer.shouldSkipAi(self)) {
             if (!self.getNavigation().isDone()) {
                 self.getNavigation().tick();
-                self.getMoveControl().tick();
-                self.getLookControl().tick();
-                self.getJumpControl().tick();
             }
+            self.getMoveControl().tick();
+            self.getLookControl().tick();
+            self.getJumpControl().tick();
             ci.cancel();
         }
     }
