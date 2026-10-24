@@ -15,10 +15,19 @@ import java.util.UUID;
  * Controlled by "regionEntryActionBar" (true/false) in config.json and updated on /neodymium2 reload.
  */
 public final class RegionEntryNotifier {
-    private static final Component ACTION_BAR_TEXT = Component.empty()
-        .append(Component.literal("해당 구역은 ").withStyle(ChatFormatting.GRAY))
-        .append(Component.literal("바닐라 민감도 설정").withStyle(ChatFormatting.GREEN))
-        .append(Component.literal("이 활성화되어 있습니다. 바닐라 로직을 위반하는 기술적 버그가 발견된다면 제보 부탁드립니다.").withStyle(ChatFormatting.GRAY));
+    private static final Component ACTION_BAR_EN = buildActionBar(NeodymiumI18n.EN_US);
+    private static final Component ACTION_BAR_KO = buildActionBar(NeodymiumI18n.KO_KR);
+
+    private static Component buildActionBar(String lang) {
+        return Component.empty()
+            .append(Component.literal(NeodymiumI18n.getByLang(lang, "actionbar.prefix")).withStyle(ChatFormatting.GRAY))
+            .append(Component.literal(NeodymiumI18n.getByLang(lang, "actionbar.highlight")).withStyle(ChatFormatting.GREEN))
+            .append(Component.literal(NeodymiumI18n.getByLang(lang, "actionbar.suffix")).withStyle(ChatFormatting.GRAY));
+    }
+
+    private static Component actionBarFor(ServerPlayer player) {
+        return NeodymiumI18n.KO_KR.equals(NeodymiumI18n.resolveLang(player)) ? ACTION_BAR_KO : ACTION_BAR_EN;
+    }
 
     private static volatile boolean enabled = true;
     private static final Set<UUID> INSIDE_PLAYERS = new HashSet<>();
@@ -75,7 +84,7 @@ public final class RegionEntryNotifier {
             if (nowInside && !wasInside) {
                 INSIDE_PLAYERS.add(uuid);
                 SECOND_PULSE_TICK.put(uuid, tick + 40);
-                player.sendSystemMessage(ACTION_BAR_TEXT, true);
+                player.sendSystemMessage(actionBarFor(player), true);
             } else if (!nowInside && wasInside) {
                 INSIDE_PLAYERS.remove(uuid);
                 SECOND_PULSE_TICK.remove(uuid);
@@ -83,7 +92,7 @@ public final class RegionEntryNotifier {
                 Integer pulse = SECOND_PULSE_TICK.get(uuid);
                 if (pulse != null && tick >= pulse) {
                     SECOND_PULSE_TICK.remove(uuid);
-                    player.sendSystemMessage(ACTION_BAR_TEXT, true);
+                    player.sendSystemMessage(actionBarFor(player), true);
                 }
             }
         }

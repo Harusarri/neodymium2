@@ -26,7 +26,8 @@ import java.util.*;
 
 /**
  * Modern, aligned, minimal chat UI and paginated Text GUI for /neodymium2 admin commands,
- * including standalone chunk protection commands and external RegionProvider integration.
+ * including standalone chunk protection commands, external RegionProvider integration,
+ * and automatic client-language localization (en_us / ko_kr).
  */
 public final class NeodymiumCommandUi {
     private static final int PAGE_SIZE = 6;
@@ -102,6 +103,10 @@ public final class NeodymiumCommandUi {
                 .executes(ctx -> sendNametagsPage(ctx.getSource(), 1))
                 .then(Commands.argument("page", IntegerArgumentType.integer(1))
                     .executes(ctx -> sendNametagsPage(ctx.getSource(), IntegerArgumentType.getInteger(ctx, "page")))))
+            .then(Commands.literal("lang")
+                .executes(ctx -> executeLang(ctx.getSource(), null))
+                .then(Commands.argument("mode", StringArgumentType.word())
+                    .executes(ctx -> executeLang(ctx.getSource(), StringArgumentType.getString(ctx, "mode")))))
             .then(Commands.literal("reload")
                 .executes(ctx -> executeReload(ctx.getSource()))));
     }
@@ -117,26 +122,48 @@ public final class NeodymiumCommandUi {
             .withHoverEvent(new HoverEvent.ShowText(Component.literal(hover))));
     }
 
-    private static MutableComponent navBar(String activeTab) {
+    private static MutableComponent navBar(String activeTab, String lang) {
         MutableComponent bar = Component.empty();
-        bar.append(button("[상태]", activeTab.equals("status") ? ChatFormatting.YELLOW : ChatFormatting.GRAY,
+        bar.append(button(NeodymiumI18n.getByLang(lang, "nav.status"), activeTab.equals("status") ? ChatFormatting.YELLOW : ChatFormatting.GRAY,
             "/neodymium2 status", "/neodymium2 status"));
         bar.append(text("  ", ChatFormatting.DARK_GRAY));
-        bar.append(button("[모듈]", activeTab.equals("modules") ? ChatFormatting.YELLOW : ChatFormatting.GRAY,
+        bar.append(button(NeodymiumI18n.getByLang(lang, "nav.modules"), activeTab.equals("modules") ? ChatFormatting.YELLOW : ChatFormatting.GRAY,
             "/neodymium2 modules", "/neodymium2 modules"));
         bar.append(text("  ", ChatFormatting.DARK_GRAY));
-        bar.append(button("[구역]", activeTab.equals("regions") ? ChatFormatting.YELLOW : ChatFormatting.GRAY,
+        bar.append(button(NeodymiumI18n.getByLang(lang, "nav.regions"), activeTab.equals("regions") ? ChatFormatting.YELLOW : ChatFormatting.GRAY,
             "/neodymium2 regions 1", "/neodymium2 regions 1"));
         bar.append(text("  ", ChatFormatting.DARK_GRAY));
-        bar.append(button("[이름표]", activeTab.equals("nametags") ? ChatFormatting.YELLOW : ChatFormatting.GRAY,
+        bar.append(button(NeodymiumI18n.getByLang(lang, "nav.nametags"), activeTab.equals("nametags") ? ChatFormatting.YELLOW : ChatFormatting.GRAY,
             "/neodymium2 nametags 1", "/neodymium2 nametags 1"));
         bar.append(text("  ", ChatFormatting.DARK_GRAY));
-        bar.append(button("[리로드]", ChatFormatting.GRAY,
+        bar.append(button(NeodymiumI18n.getByLang(lang, "nav.reload"), ChatFormatting.GRAY,
             "/neodymium2 reload", "/neodymium2 reload"));
         return bar;
     }
 
+    public static int executeLang(CommandSourceStack source, String requestedMode) {
+        String lang = NeodymiumI18n.resolveLang(source);
+        if (requestedMode == null || requestedMode.isBlank()) {
+            source.sendSuccess(() -> text(
+                NeodymiumI18n.trByLang(lang, "lang.set", NeodymiumI18n.mode(), lang),
+                ChatFormatting.GREEN
+            ), false);
+            return 1;
+        }
+        if (!NeodymiumI18n.setMode(requestedMode)) {
+            source.sendFailure(text(NeodymiumI18n.getByLang(lang, "lang.usage"), ChatFormatting.RED));
+            return 0;
+        }
+        String updatedLang = NeodymiumI18n.resolveLang(source);
+        source.sendSuccess(() -> text(
+            NeodymiumI18n.trByLang(updatedLang, "lang.set", NeodymiumI18n.mode(), updatedLang),
+            ChatFormatting.GREEN
+        ), false);
+        return 1;
+    }
+
     public static int sendStatus(CommandSourceStack source) {
+        String lang = NeodymiumI18n.resolveLang(source);
         var s = Neodymium2.snapshot();
         MinecraftServer server = source.getServer();
         double mspt = server != null ? server.getAverageTickTimeNanos() / 1_000_000.0 : 0.0;
@@ -148,70 +175,84 @@ public final class NeodymiumCommandUi {
            .append(text(s.settings().enabled() ? "ON" : "OFF", s.settings().enabled() ? ChatFormatting.GREEN : ChatFormatting.RED))
            .append(text("  ·  ", ChatFormatting.DARK_GRAY))
            .append(text(String.format(Locale.US, "%.1f ms (%.1f TPS, G%d)", mspt, tps, gear), ChatFormatting.WHITE))
-           .append(text("  ·  보호구역 ", ChatFormatting.GRAY))
-           .append(text(s.regions().size() + "개\n", ChatFormatting.WHITE));
+           .append(text(NeodymiumI18n.getByLang(lang, "status.protected_regions"), ChatFormatting.GRAY))
+           .append(text(NeodymiumI18n.trByLang(lang, "status.protected_regions_val", s.regions().size()), ChatFormatting.WHITE));
 
         if (!s.guard().isEmpty()) {
-            out.append(text("  보호 대기      ", ChatFormatting.RED))
+            out.append(text(NeodymiumI18n.getByLang(lang, "status.guard_label"), ChatFormatting.RED))
                .append(text(s.guard() + "\n", ChatFormatting.WHITE));
         }
 
-        out.append(text("  스폰 최적화    ", ChatFormatting.GRAY))
-           .append(text("실행 " + compact(RegionSpawner.outsideEvaluatedChunks())
-               + "  ·  생략 " + compact(RegionSpawner.outsideSkippedChunks())
-               + "  ·  캐시 " + compact(RegionSpawner.elidedSpawnCostLookups() + OutsideSpawnAndDensity.precookedReuses() + OutsideSpawnAndDensity.fastCollisionHits()) + "\n", ChatFormatting.WHITE));
+        out.append(text(NeodymiumI18n.getByLang(lang, "status.spawn_label"), ChatFormatting.GRAY))
+           .append(text(NeodymiumI18n.trByLang(lang, "status.spawn_val",
+               compact(RegionSpawner.outsideEvaluatedChunks()),
+               compact(RegionSpawner.outsideSkippedChunks()),
+               compact(RegionSpawner.elidedSpawnCostLookups() + OutsideSpawnAndDensity.precookedReuses() + OutsideSpawnAndDensity.fastCollisionHits())
+           ), ChatFormatting.WHITE));
 
-        out.append(text("  엔티티 최적화  ", ChatFormatting.GRAY))
-           .append(text("AI생략 " + compact(OutsideEntityOptimizer.skippedAiTicks())
-               + "  ·  충돌생략 " + compact(OutsideEntityOptimizer.skippedPushTicks())
-               + "  ·  과밀집감속 " + compact(OutsideSpawnAndDensity.overcrowdedThrottles()) + "\n", ChatFormatting.WHITE));
+        out.append(text(NeodymiumI18n.getByLang(lang, "status.entity_label"), ChatFormatting.GRAY))
+           .append(text(NeodymiumI18n.trByLang(lang, "status.entity_val",
+               compact(OutsideEntityOptimizer.skippedAiTicks()),
+               compact(OutsideEntityOptimizer.skippedPushTicks()),
+               compact(OutsideSpawnAndDensity.overcrowdedThrottles())
+           ), ChatFormatting.WHITE));
 
-        out.append(text("  주민 / 이름표  ", ChatFormatting.GRAY))
-           .append(text("주민AI " + (VillagerLobotomy.enabled() ? "ON" : "OFF")
-               + "  ·  우회차단 " + compact(OutsideSpawnAndDensity.blockedNametagBypasses())
-               + "  ·  진입안내 " + (RegionEntryNotifier.enabled() ? "ON" : "OFF") + "\n", ChatFormatting.WHITE));
+        out.append(text(NeodymiumI18n.getByLang(lang, "status.villager_label"), ChatFormatting.GRAY))
+           .append(text(NeodymiumI18n.trByLang(lang, "status.villager_val",
+               VillagerLobotomy.enabled() ? "ON" : "OFF",
+               compact(OutsideSpawnAndDensity.blockedNametagBypasses()),
+               RegionEntryNotifier.enabled() ? "ON" : "OFF"
+           ), ChatFormatting.WHITE));
 
-        out.append(text("  월드 최적화    ", ChatFormatting.GRAY))
-           .append(text("랜덤틱 " + compact(OutsideWorldOptimizer.throttledRandomTickChunks())
-               + "  ·  유체 " + compact(OutsideWorldOptimizer.skippedFluidScans())
-               + "  ·  호퍼 " + compact(OutsideWorldOptimizer.throttledHopperPolls()) + "\n", ChatFormatting.WHITE));
+        out.append(text(NeodymiumI18n.getByLang(lang, "status.world_label"), ChatFormatting.GRAY))
+           .append(text(NeodymiumI18n.trByLang(lang, "status.world_val",
+               compact(OutsideWorldOptimizer.throttledRandomTickChunks()),
+               compact(OutsideWorldOptimizer.skippedFluidScans()),
+               compact(OutsideWorldOptimizer.throttledHopperPolls())
+           ), ChatFormatting.WHITE));
 
-        out.append(navBar("status"));
+        out.append(navBar("status", lang));
         source.sendSuccess(() -> out, false);
         return 1;
     }
 
     public static int sendModules(CommandSourceStack source) {
+        String lang = NeodymiumI18n.resolveLang(source);
         List<NeodymiumModule> modules = ModuleRegistry.all();
         MutableComponent out = Component.empty();
-        out.append(text("Neodymium 2 모듈 (" + (modules.size() + 1) + "개)\n", ChatFormatting.GOLD));
+        out.append(text(NeodymiumI18n.trByLang(lang, "modules.header", modules.size() + 1), ChatFormatting.GOLD));
 
         for (NeodymiumModule m : modules) {
             boolean on = m.enabled();
+            String modName = NeodymiumI18n.getByLang(lang, "module." + m.id());
+            if (("module." + m.id()).equals(modName)) {
+                modName = m.displayName();
+            }
             MutableComponent line = text("  ", ChatFormatting.GRAY)
                 .append(text(on ? "ON   " : "OFF  ", on ? ChatFormatting.GREEN : ChatFormatting.RED))
-                .append(text(m.displayName(), ChatFormatting.WHITE))
+                .append(text(modName, ChatFormatting.WHITE))
                 .withStyle(style -> style.withHoverEvent(new HoverEvent.ShowText(
-                    Component.literal("ID: " + m.id() + "\n타겟: " + m.targetHooks())
+                    Component.literal(NeodymiumI18n.trByLang(lang, "modules.hover_target", m.id(), m.targetHooks()))
                 )));
             out.append(line).append(text("\n", ChatFormatting.GRAY));
         }
         out.append(text("  ", ChatFormatting.GRAY))
            .append(text("ON   ", ChatFormatting.GREEN))
-           .append(text("구역 외 LagFree 스폰 · 과밀집 감속 · 이름표 차단\n", ChatFormatting.WHITE));
+           .append(text(NeodymiumI18n.getByLang(lang, "modules.extra_lagfree"), ChatFormatting.WHITE));
 
-        out.append(navBar("modules"));
+        out.append(navBar("modules", lang));
         source.sendSuccess(() -> out, false);
         return 1;
     }
 
     public static int executeReload(CommandSourceStack source) {
+        String lang = NeodymiumI18n.resolveLang(source);
         boolean ok = Neodymium2.reload();
         if (ok) {
-            source.sendSuccess(() -> text("Neodymium 2 설정을 다시 불러왔습니다.", ChatFormatting.GREEN), false);
+            source.sendSuccess(() -> text(NeodymiumI18n.getByLang(lang, "reload.success"), ChatFormatting.GREEN), false);
             return sendStatus(source);
         } else {
-            source.sendFailure(text("설정 오류: 기존 설정을 유지했습니다. 서버 로그를 확인하세요.", ChatFormatting.RED));
+            source.sendFailure(text(NeodymiumI18n.getByLang(lang, "reload.failed"), ChatFormatting.RED));
             return 0;
         }
     }
@@ -228,6 +269,7 @@ public final class NeodymiumCommandUi {
     ) {}
 
     public static int sendRegionsPage(CommandSourceStack source, int requestedPage) {
+        String lang = NeodymiumI18n.resolveLang(source);
         var snap = Neodymium2.snapshot();
         List<RegionPolicies.Ref> refs = new ArrayList<>(snap.regions());
         refs.sort(Comparator.comparing(RegionPolicies.Ref::dimension).thenComparing(RegionPolicies.Ref::region));
@@ -238,12 +280,24 @@ public final class NeodymiumCommandUi {
         List<RegionRow> rows = new ArrayList<>(refs.size());
         for (RegionPolicies.Ref ref : refs) {
             NeodymiumRegionProvider.ResolvedRegion resolved = ref.resolve();
-            String disp = cleanRegionName(ref.region());
+            String disp = cleanRegionName(ref.region(), lang);
             int cx = 0, cy = 80, cz = 0;
-            String boundsDesc = "좌표 정보 없음";
+            String boundsDesc = NeodymiumI18n.getByLang(lang, "regions.no_bounds");
             if (resolved != null) {
-                if (resolved.displayName() != null && !resolved.displayName().isBlank()) {
-                    disp = ref.isStandaloneChunk() ? resolved.displayName() : cleanRegionName(resolved.displayName());
+                if (ref.isStandaloneChunk()) {
+                    int[] b = RegionPolicies.parseStandaloneChunkBounds(ref.region());
+                    if (b != null) {
+                        if (b[0] == b[2] && b[1] == b[3]) {
+                            disp = NeodymiumI18n.trByLang(lang, "nametags.chunk_fmt", b[0], b[1]);
+                        } else {
+                            disp = NeodymiumI18n.trByLang(lang, "nametags.chunk_range_fmt",
+                                b[0], b[1], b[2], b[3], b[2] - b[0] + 1, b[3] - b[1] + 1);
+                        }
+                    } else if (resolved.displayName() != null && !resolved.displayName().isBlank()) {
+                        disp = resolved.displayName();
+                    }
+                } else if (resolved.displayName() != null && !resolved.displayName().isBlank()) {
+                    disp = cleanRegionName(resolved.displayName(), lang);
                 }
                 cx = resolved.centerX();
                 cy = resolved.centerY();
@@ -262,36 +316,36 @@ public final class NeodymiumCommandUi {
         int end = Math.min(total, start + PAGE_SIZE);
 
         MutableComponent out = Component.empty();
-        out.append(text(String.format(Locale.US, "바닐라 보호 구역  %d / %d 페이지  (총 %d개)  ", page, totalPages, total), ChatFormatting.GOLD));
+        out.append(text(NeodymiumI18n.trByLang(lang, "regions.header", page, totalPages, total), ChatFormatting.GOLD));
         if (source.getPlayer() != null) {
-            out.append(button("[+현위치 청크 토글]", ChatFormatting.GREEN,
+            out.append(button(NeodymiumI18n.getByLang(lang, "regions.btn_toggle_chunk"), ChatFormatting.GREEN,
                 "/neodymium2 chunk toggle",
-                "현재 서 있는 청크의 바닐라 민감도 보호를 켜거나 끕니다.\n명령어: /neodymium2 chunk add [반경|x z]"));
+                NeodymiumI18n.getByLang(lang, "regions.hover_toggle_chunk")));
         }
         out.append(text("\n", ChatFormatting.GRAY));
 
         if (total == 0) {
-            out.append(text("  지정된 바닐라 보호 구역이 없습니다. (/neodymium2 chunk add 로 청크 보호 가능)\n", ChatFormatting.GRAY));
+            out.append(text(NeodymiumI18n.getByLang(lang, "regions.empty"), ChatFormatting.GRAY));
         } else {
             for (int i = start; i < end; i++) {
                 RegionRow row = rows.get(i);
-                String dimShort = formatDim(row.dimension());
+                String dimShort = formatDim(row.dimension(), lang);
                 String tpCmd = "/execute in " + row.dimension() + " run tp @s " + row.cx() + " " + row.cy() + " " + row.cz();
-                String hoverInfo = "ID: " + row.regionId() + "\n범위: " + row.boundsDesc() + "\n클릭: " + tpCmd;
+                String hoverInfo = NeodymiumI18n.trByLang(lang, "regions.hover_tp", row.regionId(), row.boundsDesc(), tpCmd);
 
                 out.append(text(String.format(Locale.US, "  %02d  ", i + 1), ChatFormatting.GRAY))
-                   .append(button("[이동]", ChatFormatting.YELLOW, tpCmd, hoverInfo));
+                   .append(button(NeodymiumI18n.getByLang(lang, "regions.btn_tp"), ChatFormatting.YELLOW, tpCmd, hoverInfo));
 
                 if (row.standaloneChunk()) {
                     String removeCmd = "/neodymium2 chunk removeid \"" + row.dimension() + "\" " + row.regionId();
-                    String removeHover = "청크 보호 해제\n대상: " + row.displayName() + "\n클릭: 즉시 보호 해제";
+                    String removeHover = NeodymiumI18n.trByLang(lang, "regions.hover_remove", row.displayName());
                     out.append(text(" ", ChatFormatting.DARK_GRAY))
-                       .append(button("[해제]", ChatFormatting.RED, removeCmd, removeHover));
+                       .append(button(NeodymiumI18n.getByLang(lang, "regions.btn_remove"), ChatFormatting.RED, removeCmd, removeHover));
                 } else if (canManageExternal) {
                     String manageCmd = "/neodymium2 manage \"" + row.dimension() + "\" " + row.regionId();
-                    String manageHover = "구역 관리 탭 열기\n구역: " + row.displayName() + " (" + row.regionId() + ")\n클릭: 구역 관리 GUI 열기";
+                    String manageHover = NeodymiumI18n.trByLang(lang, "regions.hover_manage", row.displayName(), row.regionId());
                     out.append(text(" ", ChatFormatting.DARK_GRAY))
-                       .append(button("[관리]", ChatFormatting.AQUA, manageCmd, manageHover));
+                       .append(button(NeodymiumI18n.getByLang(lang, "regions.btn_manage"), ChatFormatting.AQUA, manageCmd, manageHover));
                 }
 
                 out.append(text("  " + dimShort + "   ", ChatFormatting.GRAY))
@@ -300,17 +354,18 @@ public final class NeodymiumCommandUi {
             }
         }
 
-        out.append(paginationBar("/neodymium2 regions ", page, totalPages))
+        out.append(paginationBar("/neodymium2 regions ", page, totalPages, lang))
            .append(text("   |   ", ChatFormatting.DARK_GRAY))
-           .append(navBar("regions"));
+           .append(navBar("regions", lang));
         source.sendSuccess(() -> out, false);
         return 1;
     }
 
     public static int toggleCurrentChunk(CommandSourceStack source) {
+        String lang = NeodymiumI18n.resolveLang(source);
         ServerPlayer player = source.getPlayer();
         if (player == null) {
-            source.sendFailure(text("콘솔에서는 /neodymium2 chunk add <chunkX> <chunkZ> 또는 remove <chunkX> <chunkZ> 를 사용하세요.", ChatFormatting.RED));
+            source.sendFailure(text(NeodymiumI18n.getByLang(lang, "chunk.console_toggle"), ChatFormatting.RED));
             return 0;
         }
         String dim = player.level().dimension().identifier().toString();
@@ -325,13 +380,14 @@ public final class NeodymiumCommandUi {
     }
 
     public static int addCurrentChunk(CommandSourceStack source, int radius) {
+        String lang = NeodymiumI18n.resolveLang(source);
         ServerPlayer player = source.getPlayer();
         if (player == null) {
-            source.sendFailure(text("콘솔에서는 /neodymium2 chunk add <chunkX> <chunkZ> 를 사용하세요.", ChatFormatting.RED));
+            source.sendFailure(text(NeodymiumI18n.getByLang(lang, "chunk.console_add"), ChatFormatting.RED));
             return 0;
         }
         if (radius < 0 || radius > 16) {
-            source.sendFailure(text("청크 반경은 0 ~ 16 사이여야 합니다.", ChatFormatting.RED));
+            source.sendFailure(text(NeodymiumI18n.getByLang(lang, "chunk.radius_range"), ChatFormatting.RED));
             return 0;
         }
         BlockPos pos = player.blockPosition();
@@ -344,22 +400,24 @@ public final class NeodymiumCommandUi {
     }
 
     public static int addChunkCoords(CommandSourceStack source, int chunkX, int chunkZ) {
+        String lang = NeodymiumI18n.resolveLang(source);
         String dim = source.getLevel().dimension().identifier().toString();
         try {
             RegionPolicies.Ref ref = RegionPolicies.Ref.ofChunk(dim, chunkX, chunkZ);
             Neodymium2.setSensitive(ref, true);
             source.sendSuccess(() -> text(
-                String.format(Locale.US, "청크 [%d, %d] (%s) 바닐라 민감도 보호를 활성화했습니다.", chunkX, chunkZ, formatDim(dim).trim()),
+                NeodymiumI18n.trByLang(lang, "chunk.added_single", chunkX, chunkZ, formatDim(dim, lang).trim()),
                 ChatFormatting.GREEN
             ), true);
             return sendRegionsPage(source, 1);
         } catch (Exception ex) {
-            source.sendFailure(text("청크 보호를 저장하지 못했습니다: " + ex.getMessage(), ChatFormatting.RED));
+            source.sendFailure(text(NeodymiumI18n.trByLang(lang, "chunk.save_failed", ex.getMessage()), ChatFormatting.RED));
             return 0;
         }
     }
 
     public static int addChunkRangeCoords(CommandSourceStack source, int cx1, int cz1, int cx2, int cz2) {
+        String lang = NeodymiumI18n.resolveLang(source);
         String dim = source.getLevel().dimension().identifier().toString();
         try {
             RegionPolicies.Ref ref = RegionPolicies.Ref.ofChunkRange(dim, cx1, cz1, cx2, cz2);
@@ -367,21 +425,22 @@ public final class NeodymiumCommandUi {
             int minCx = Math.min(cx1, cx2), maxCx = Math.max(cx1, cx2);
             int minCz = Math.min(cz1, cz2), maxCz = Math.max(cz1, cz2);
             source.sendSuccess(() -> text(
-                String.format(Locale.US, "청크 범위 [%d,%d ~ %d,%d] (%s) 바닐라 민감도 보호를 활성화했습니다.",
-                    minCx, minCz, maxCx, maxCz, formatDim(dim).trim()),
+                NeodymiumI18n.trByLang(lang, "chunk.added_range",
+                    minCx, minCz, maxCx, maxCz, formatDim(dim, lang).trim()),
                 ChatFormatting.GREEN
             ), true);
             return sendRegionsPage(source, 1);
         } catch (Exception ex) {
-            source.sendFailure(text("청크 범위 보호를 저장하지 못했습니다: " + ex.getMessage(), ChatFormatting.RED));
+            source.sendFailure(text(NeodymiumI18n.trByLang(lang, "chunk.range_save_failed", ex.getMessage()), ChatFormatting.RED));
             return 0;
         }
     }
 
     public static int removeCurrentChunk(CommandSourceStack source) {
+        String lang = NeodymiumI18n.resolveLang(source);
         ServerPlayer player = source.getPlayer();
         if (player == null) {
-            source.sendFailure(text("콘솔에서는 /neodymium2 chunk remove <chunkX> <chunkZ> 를 사용하세요.", ChatFormatting.RED));
+            source.sendFailure(text(NeodymiumI18n.getByLang(lang, "chunk.console_remove"), ChatFormatting.RED));
             return 0;
         }
         BlockPos pos = player.blockPosition();
@@ -389,6 +448,7 @@ public final class NeodymiumCommandUi {
     }
 
     public static int removeChunkCoords(CommandSourceStack source, int chunkX, int chunkZ) {
+        String lang = NeodymiumI18n.resolveLang(source);
         String dim = source.getLevel().dimension().identifier().toString();
         List<RegionPolicies.Ref> matching = new ArrayList<>();
         for (RegionPolicies.Ref ref : Neodymium2.snapshot().regions()) {
@@ -397,53 +457,58 @@ public final class NeodymiumCommandUi {
             }
         }
         if (matching.isEmpty()) {
-            source.sendFailure(text(String.format(Locale.US, "청크 [%d, %d] 에 지정된 단독 청크 보호가 없습니다.", chunkX, chunkZ), ChatFormatting.RED));
+            source.sendFailure(text(NeodymiumI18n.trByLang(lang, "chunk.none_at", chunkX, chunkZ), ChatFormatting.RED));
             return 0;
         }
         try {
             for (RegionPolicies.Ref ref : matching) {
                 Neodymium2.setSensitive(ref, false);
             }
+            final int count = matching.size();
             source.sendSuccess(() -> text(
-                String.format(Locale.US, "청크 [%d, %d] 관련 바닐라 보호(%d개)를 해제했습니다.", chunkX, chunkZ, matching.size()),
+                NeodymiumI18n.KO_KR.equals(lang)
+                    ? NeodymiumI18n.trByLang(lang, "chunk.removed_coords", chunkX, chunkZ, count)
+                    : NeodymiumI18n.trByLang(lang, "chunk.removed_coords", count, chunkX, chunkZ),
                 ChatFormatting.YELLOW
             ), true);
             return sendRegionsPage(source, 1);
         } catch (Exception ex) {
-            source.sendFailure(text("청크 보호를 해제하지 못했습니다: " + ex.getMessage(), ChatFormatting.RED));
+            source.sendFailure(text(NeodymiumI18n.trByLang(lang, "chunk.remove_failed", ex.getMessage()), ChatFormatting.RED));
             return 0;
         }
     }
 
     public static int removeChunkById(CommandSourceStack source, String dimension, String regionId) {
+        String lang = NeodymiumI18n.resolveLang(source);
         try {
             RegionPolicies.Ref ref = new RegionPolicies.Ref(dimension, regionId);
             if (!Neodymium2.sensitive(ref)) {
-                source.sendFailure(text("이미 해제되었거나 존재하지 않는 보호 항목입니다: " + regionId, ChatFormatting.RED));
+                source.sendFailure(text(NeodymiumI18n.trByLang(lang, "chunk.already_removed", regionId), ChatFormatting.RED));
                 return 0;
             }
             Neodymium2.setSensitive(ref, false);
-            source.sendSuccess(() -> text("보호 구역 [" + regionId + "] 을(를) 해제했습니다.", ChatFormatting.YELLOW), true);
+            source.sendSuccess(() -> text(NeodymiumI18n.trByLang(lang, "chunk.removed_id", regionId), ChatFormatting.YELLOW), true);
             return sendRegionsPage(source, 1);
         } catch (Exception ex) {
-            source.sendFailure(text("보호 해제 실패: " + ex.getMessage(), ChatFormatting.RED));
+            source.sendFailure(text(NeodymiumI18n.trByLang(lang, "chunk.remove_failed", ex.getMessage()), ChatFormatting.RED));
             return 0;
         }
     }
 
     public static int openRegionManageGui(CommandSourceStack source, String dimension, String regionId) {
+        String lang = NeodymiumI18n.resolveLang(source);
         ServerPlayer player = source.getPlayer();
         if (player == null) {
-            source.sendFailure(text("플레이어만 구역 관리 GUI를 열 수 있습니다.", ChatFormatting.RED));
+            source.sendFailure(text(NeodymiumI18n.getByLang(lang, "manage.player_only"), ChatFormatting.RED));
             return 0;
         }
         NeodymiumRegionProvider provider = NeodymiumApi.getRegionProvider();
         if (provider == null || !provider.canOpenManageGui()) {
-            source.sendFailure(text("연결된 외부 구역 관리 GUI 제공자(YAWPManager 등)가 없습니다.", ChatFormatting.RED));
+            source.sendFailure(text(NeodymiumI18n.getByLang(lang, "manage.no_provider"), ChatFormatting.RED));
             return 0;
         }
         if (!provider.openManageGui(player, dimension, regionId)) {
-            source.sendFailure(text("해당 구역을 찾을 수 없거나 관리 권한이 없습니다: " + regionId, ChatFormatting.RED));
+            source.sendFailure(text(NeodymiumI18n.trByLang(lang, "manage.not_found", regionId), ChatFormatting.RED));
             return 0;
         }
         return 1;
@@ -478,6 +543,7 @@ public final class NeodymiumCommandUi {
     }
 
     public static int sendNametagsPage(CommandSourceStack source, int requestedPage) {
+        String lang = NeodymiumI18n.resolveLang(source);
         MinecraftServer server = source.getServer();
         String exemptName = Neodymium2.snapshot().settings().villagerLobotomy().exemptName();
         NeodymiumRegionProvider provider = NeodymiumApi.getRegionProvider();
@@ -515,13 +581,15 @@ public final class NeodymiumCommandUi {
                     if (extRegion != null) {
                         rawId = extRegion.regionId();
                         locKey = "region:" + rawId;
-                        regionDisp = cleanRegionName(extRegion.displayName());
+                        regionDisp = cleanRegionName(extRegion.displayName(), lang);
                     } else {
                         int cx = pos.getX() >> 4;
                         int cz = pos.getZ() >> 4;
                         rawId = "chunk:" + cx + "," + cz;
                         locKey = "chunk:" + (cx >> 1) + ":" + (cz >> 1);
-                        regionDisp = isProtected ? String.format(Locale.US, "청크 [%d, %d]", cx, cz) : "야생";
+                        regionDisp = isProtected
+                            ? NeodymiumI18n.trByLang(lang, "nametags.chunk_fmt", cx, cz)
+                            : NeodymiumI18n.getByLang(lang, "nametags.wild");
                     }
 
                     String typeName = entity.getType().getDescription().getString();
@@ -551,29 +619,29 @@ public final class NeodymiumCommandUi {
         int end = Math.min(totalGroups, start + PAGE_SIZE);
 
         MutableComponent out = Component.empty();
-        out.append(text(String.format(Locale.US, "이름표 엔티티  %d / %d 페이지  (총 %d마리 · 차단 %d · 보호 %d)\n",
+        out.append(text(NeodymiumI18n.trByLang(lang, "nametags.header",
             page, totalPages, totalNamedEntities, totalBlockedExempt, totalProtectedExempt), ChatFormatting.GOLD));
 
         if (totalGroups == 0) {
-            out.append(text("  로드된 청크 내에 이름표가 부착된 엔티티가 없습니다.\n", ChatFormatting.GRAY));
+            out.append(text(NeodymiumI18n.getByLang(lang, "nametags.empty"), ChatFormatting.GRAY));
         } else {
             for (int i = start; i < end; i++) {
                 NametagGroup g = list.get(i);
                 MutableComponent stateCol;
                 if (g.protectedRegion) {
-                    stateCol = text("보호   ", ChatFormatting.GREEN);
+                    stateCol = text(NeodymiumI18n.getByLang(lang, "nametags.state_protected"), ChatFormatting.GREEN);
                 } else if (g.isExemptNameAttempt) {
-                    stateCol = text("차단   ", ChatFormatting.RED);
+                    stateCol = text(NeodymiumI18n.getByLang(lang, "nametags.state_blocked"), ChatFormatting.RED);
                 } else {
-                    stateCol = text("일반   ", ChatFormatting.GRAY);
+                    stateCol = text(NeodymiumI18n.getByLang(lang, "nametags.state_normal"), ChatFormatting.GRAY);
                 }
 
                 String tpCmd = "/execute in " + g.dimension + " run tp @s " + g.sampleX + " " + g.sampleY + " " + g.sampleZ;
-                String hoverInfo = String.format(Locale.US, "위치: (%d, %d, %d)\n구역 ID: %s\n클릭: %s",
+                String hoverInfo = NeodymiumI18n.trByLang(lang, "nametags.hover_tp",
                     g.sampleX, g.sampleY, g.sampleZ, g.regionRawId, tpCmd);
 
                 out.append(text(String.format(Locale.US, "  %02d  ", i + 1), ChatFormatting.GRAY))
-                   .append(button("[이동]", ChatFormatting.YELLOW, tpCmd, hoverInfo))
+                   .append(button(NeodymiumI18n.getByLang(lang, "regions.btn_tp"), ChatFormatting.YELLOW, tpCmd, hoverInfo))
                    .append(text("  ", ChatFormatting.GRAY))
                    .append(stateCol)
                    .append(text("\"" + g.customName + "\"  ", ChatFormatting.WHITE))
@@ -582,39 +650,41 @@ public final class NeodymiumCommandUi {
             }
         }
 
-        out.append(paginationBar("/neodymium2 nametags ", page, totalPages))
+        out.append(paginationBar("/neodymium2 nametags ", page, totalPages, lang))
            .append(text("   |   ", ChatFormatting.DARK_GRAY))
-           .append(navBar("nametags"));
+           .append(navBar("nametags", lang));
         source.sendSuccess(() -> out, false);
         return 1;
     }
 
-    private static MutableComponent paginationBar(String baseCommand, int page, int totalPages) {
+    private static MutableComponent paginationBar(String baseCommand, int page, int totalPages, String lang) {
         MutableComponent bar = Component.empty();
         if (page > 1) {
-            bar.append(button("[<]", ChatFormatting.YELLOW, baseCommand + (page - 1), (page - 1) + "페이지"));
+            bar.append(button("[<]", ChatFormatting.YELLOW, baseCommand + (page - 1),
+                NeodymiumI18n.trByLang(lang, "page.hover", page - 1)));
         } else {
             bar.append(text("[<]", ChatFormatting.DARK_GRAY));
         }
         bar.append(text(String.format(Locale.US, "  %d / %d  ", page, totalPages), ChatFormatting.WHITE));
         if (page < totalPages) {
-            bar.append(button("[>]", ChatFormatting.YELLOW, baseCommand + (page + 1), (page + 1) + "페이지"));
+            bar.append(button("[>]", ChatFormatting.YELLOW, baseCommand + (page + 1),
+                NeodymiumI18n.trByLang(lang, "page.hover", page + 1)));
         } else {
             bar.append(text("[>]", ChatFormatting.DARK_GRAY));
         }
         return bar;
     }
 
-    private static String cleanRegionName(String name) {
-        if (name == null || name.isBlank()) return "미지정 구역";
-        if (name.startsWith("area_") || name.startsWith("region-")) return "일반 구역";
+    private static String cleanRegionName(String name, String lang) {
+        if (name == null || name.isBlank()) return NeodymiumI18n.getByLang(lang, "region.unnamed");
+        if (name.startsWith("area_") || name.startsWith("region-")) return NeodymiumI18n.getByLang(lang, "region.generic");
         return name;
     }
 
-    private static String formatDim(String dim) {
-        if ("minecraft:overworld".equals(dim)) return "오버월드";
-        if ("minecraft:the_nether".equals(dim)) return "네더    ";
-        if ("minecraft:the_end".equals(dim)) return "엔드    ";
+    private static String formatDim(String dim, String lang) {
+        if ("minecraft:overworld".equals(dim)) return NeodymiumI18n.getByLang(lang, "dim.overworld");
+        if ("minecraft:the_nether".equals(dim)) return NeodymiumI18n.getByLang(lang, "dim.the_nether");
+        if ("minecraft:the_end".equals(dim)) return NeodymiumI18n.getByLang(lang, "dim.the_end");
         return dim;
     }
 

@@ -1,3 +1,4 @@
+import kr.harusarri.neodymium2.NeodymiumI18n;
 import kr.harusarri.neodymium2.core.*;
 import java.util.*;
 public class VillagerConfigTests {
@@ -10,6 +11,9 @@ public class VillagerConfigTests {
    try{Settings.parse("{\"villagerLobotomy\":"+s+"}");throw new AssertionError(s);}catch(RuntimeException expected){n++;}
   }
   if(!Settings.parse(Settings.defaults().json()).equals(Settings.defaults()))throw new AssertionError("roundtrip");n++;
+  if(NeodymiumI18n.englishMap().isEmpty()||!NeodymiumI18n.englishMap().keySet().equals(NeodymiumI18n.koreanMap().keySet()))throw new AssertionError("lang keys mismatch");n++;
+  Settings.parse("{\"language\":\"en_us\"}");if(!NeodymiumI18n.EN_US.equals(NeodymiumI18n.mode()))throw new AssertionError("lang mode en_us");n++;
+  Settings.parse("{\"language\":\"auto\"}");if(!NeodymiumI18n.AUTO.equals(NeodymiumI18n.mode()))throw new AssertionError("lang mode auto");n++;
   System.out.println("NEO_VILLAGER_CONFIG_PASS checks="+n);
  }
 }

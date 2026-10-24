@@ -1,6 +1,7 @@
 <div align="center">
   <img src="src/main/resources/assets/neodymium2/icon.png" alt="Neodymium (60 Nd) Logo" width="160" height="160" />
   <h1>Neodymium 2</h1>
+  <p><strong>Region-Aware Server Tick Optimization Mod for Minecraft 26.3 (Fabric + ServerCore)</strong></p>
   <p><strong>Minecraft 26.3 (Fabric + ServerCore) 구역 인지형 서버 틱 최적화 모드</strong></p>
 </div>
 
@@ -9,12 +10,42 @@
 > 본 프로젝트의 코드 설계, 최적화 모듈 구현, 테스트 및 문서화 과정에는 AI 코딩 어시스턴트(**Google Antigravity**)가 활용되었습니다.  
 > *This project was developed, optimized, and documented with the assistance of AI (**Google Antigravity**).*
 
-**Neodymium 2**는 **Minecraft 26.3 (Fabric)** 및 **ServerCore** 환경을 위한 구역 인지형(Region-Aware) 서버 틱 최적화 모드입니다.  
-지정된 **바닐라 민감도 보호 구역(농장·회로·주민 시설 등)** 내부는 바닐라 틱과 동작을 100% 보존하고, 보호 구역 외부의 야생 영역에만 공격적인 엔티티·월드·스폰·주민 Brain 최적화를 적용합니다.
+---
+
+## English Overview
+
+**Neodymium 2** is a region-aware server tick optimization mod for **Minecraft 26.3 (Fabric)** and **ServerCore**.  
+It preserves **100% vanilla tick parity inside designated Vanilla-Sensitive Protected Regions** (redstone contraptions, farms, villager trading halls), while applying aggressive entity, world, spawner, and villager Brain optimizations to the surrounding wilderness.
+
+### Key Features
+
+* **Region-Aware ServerCore Integration**: Protected regions always tick at 100% vanilla rate; outside entities use dynamic Entity Activation Range (EAR) and tick intervals, automatically waking on player or piston/shulker interaction.
+* **Villager AI (Brain) Maintenance Optimization**: Elides redundant Brain ticks for idle/trading villagers outside protected regions while preserving trade restocking, price gossip, zombie curing discounts, Hero of the Village gifts, and job-site acquisition (`PoiRevisionGrid`).
+* **Outside Spawner · Entity · World Engine Optimizations**: Adaptive natural spawn intervals, distance-squared AI/push throttling (DAB), dormant block-entity compaction, fluid/random-tick throttling, and lazy-chunk projectile boundary cleanup.
+* **Standalone & External Region Plugin Support**:
+  * **Standalone Mode**: Protect chunks or chunk ranges directly via `/neodymium2 chunk` without any external region plugin.
+  * **External Integration (`NeodymiumApi`)**: Connect external region managers such as `YAWPManager` via `NeodymiumRegionProvider`.
+* **Built-In Localization (`en_us.json` & `ko_kr.json`)**:
+  * Automatically detects each player's client language (`ko_*` -> Korean, otherwise English) for all `/neodymium2` chat UIs, hover tooltips, and action-bar notifications, or allows manual override via `/neodymium2 lang [auto|en_us|ko_kr]`.
+
+### Commands (`/neodymium2`)
+
+* `/neodymium2 status` — View MSPT/TPS, protected region count, and per-module optimization telemetry
+* `/neodymium2 modules` — Inspect active optimization modules and Mixin hook targets
+* `/neodymium2 regions [page]` — Paginated list of protected regions and chunks (`[TP]`, `[Manage]`, `[Remove]` buttons)
+* `/neodymium2 nametags [page]` — Inspect nametagged entities (`PROT`, `BLOCK`, `NORM`) across loaded chunks
+* `/neodymium2 lang [auto|en_us|ko_kr]` — Check or switch display language (`auto`, `en_us`, `ko_kr`)
+* `/neodymium2 reload` — Reload `config/neodymium2/config.json` and `regions.json`
+* `/neodymium2 chunk toggle | add [<radius> | <x> <z> | <x1> <z1> <x2> <z2>] | remove [<x> <z>]` — Manage standalone chunk protection
 
 ---
 
-## 주요 기능
+## 한국어 개요 (Korean Overview)
+
+**Neodymium 2**는 **Minecraft 26.3 (Fabric)** 및 **ServerCore** 환경을 위한 구역 인지형(Region-Aware) 서버 틱 최적화 모드입니다.  
+지정된 **바닐라 민감도 보호 구역(농장·회로·주민 시설 등)** 내부는 바닐라 틱과 동작을 100% 보존하고, 보호 구역 외부의 야생 영역에만 공격적인 엔티티·월드·스폰·주민 Brain 최적화를 적용합니다.
+
+### 주요 기능
 
 * **구역 인지형 ServerCore 연동**: 보호 구역 내부 엔티티는 항상 정상 틱을 유지하고, 구역 외부 엔티티는 동적 활성 범위(EAR) 및 틱 간격을 적용합니다.
 * **주민 AI (Brain) 유지보수 최적화**: 구역 외부의 거래/대기 주민 Brain 연산을 생략하면서도 거래 재입고, 가격 변동, 좀비 치료 할인, 마을의 영웅 선물, 작업대 탐색(`PoiRevisionGrid`)은 바닐라와 동일하게 유지합니다.
@@ -22,16 +53,18 @@
 * **단독 사용 & 외부 구역 플러그인 연동 지원**:
   * **단독 사용 (Standalone)**: 별도의 구역 모드 없이 내장 `/neodymium2 chunk` 명령어로 보호 청크를 직접 지정할 수 있습니다.
   * **외부 연동 (Public API)**: `NeodymiumApi` 및 `NeodymiumRegionProvider`를 통해 `YAWPManager` 등 외부 구역 관리 모드와 연동할 수 있습니다.
+* **다국어 지원 (`en_us.json` & `ko_kr.json`)**:
+  * 플레이어의 클라이언트 언어 설정(`en_us` / `ko_kr`)을 자동 감지하여 채팅 UI, 호버 툴팁, 보호 구역 진입 액션바를 영어 또는 한국어로 표시하며, `/neodymium2 lang [auto|en_us|ko_kr]` 또는 `config.json`의 `"language"` 키로 언어를 고정할 수도 있습니다.
 
 ---
 
-## 요구 사항
+## 요구 사항 (Requirements)
 
 * **Minecraft**: `26.3`
 * **Fabric Loader**: `>=0.19.3`
 * **Java**: `>=25`
-* **필수 모드**: `fabric-api`, `servercore` (`1.5.20+26.3`)
-* **선택 연동 모드**: `yawp`, `yawpmanager`, `carpet-fga-addition`, `farmersdelight`, `brewinandchewin`, `carpet-tis-addition`
+* **필수 모드 (Required)**: `fabric-api`, `servercore` (`1.5.20+26.3`)
+* **선택 연동 모드 (Optional)**: `yawp`, `yawpmanager`, `carpet-fga-addition`, `farmersdelight`, `brewinandchewin`, `carpet-tis-addition`
 
 ---
 
@@ -44,6 +77,7 @@
 * `/neodymium2 modules` — 활성화된 최적화 모듈 목록 확인
 * `/neodymium2 regions [page]` — 보호 구역 및 보호 청크 목록 확인 (`[이동]`, `[관리]`, `[해제]` 버튼 제공)
 * `/neodymium2 nametags [page]` — 로드된 이름표 엔티티 보호/차단 현황 확인
+* `/neodymium2 lang [auto|en_us|ko_kr]` — 표시 언어 확인 및 변경 (`auto`, `en_us`, `ko_kr`)
 * `/neodymium2 reload` — `config/neodymium2/config.json` 및 `regions.json` 다시 불러오기
 
 ### 단독 사용용 청크 보호 지정 (`/neodymium2 chunk`)
@@ -96,6 +130,6 @@ boolean chunkProtected  = NeodymiumApi.isProtectedChunk(level, chunkX, chunkZ);
 
 ---
 
-## 라이선스
+## 라이선스 (License)
 
 * [MIT License](./LICENSE)

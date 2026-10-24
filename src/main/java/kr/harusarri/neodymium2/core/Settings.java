@@ -25,9 +25,10 @@ public record Settings(boolean enabled,Set<String> reclaimEntityTypes,int activa
     public static Settings defaults(){return new Settings(false,Set.of("minecraft:zombie","minecraft:skeleton","minecraft:creeper","minecraft:villager"),24,20,60,2,true);}
     public static Settings parse(String text) {
         JsonObject o=JSON.fromJson(text,JsonObject.class);if(o==null)throw new IllegalArgumentException("Empty config");
-        for(String k:o.keySet())if(!KEYS.contains(k)&&!"regionEntryActionBar".equals(k))throw new IllegalArgumentException("Unknown setting: "+k);
+        for(String k:o.keySet())if(!KEYS.contains(k)&&!"regionEntryActionBar".equals(k)&&!"language".equals(k))throw new IllegalArgumentException("Unknown setting: "+k);
         if(number(o,"schemaVersion",1)!=1)throw new IllegalArgumentException("Unsupported schemaVersion");
         kr.harusarri.neodymium2.RegionEntryNotifier.setEnabled(bool(o,"regionEntryActionBar",true));
+        if(o.has("language")){var lv=o.get("language");if(!lv.isJsonPrimitive()||!lv.getAsJsonPrimitive().isString()||!kr.harusarri.neodymium2.NeodymiumI18n.setMode(lv.getAsString()))throw new IllegalArgumentException("language must be auto, en_us, or ko_kr");}
         Settings d=defaults();Set<String> types=d.reclaimEntityTypes;
         if(o.has("reclaimEntityTypes")){types=new HashSet<>();var a=o.getAsJsonArray("reclaimEntityTypes");if(a.size()>64)throw new IllegalArgumentException("Too many types");for(var v:a){if(!v.isJsonPrimitive()||!v.getAsJsonPrimitive().isString())throw new IllegalArgumentException("Entity type must be a string");types.add(v.getAsString());}}
         boolean entityTight=bool(o,"outsideEntityTightening",true);
