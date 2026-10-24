@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "id": "neodymium2",
+  "version": "2.0.0-rc.5+26.3",
+  "name": "네오디윰 2 (Neodymium 2)",
+  "description": "Region-aware ServerCore policies, lazy-chunk projectile cleanup and villager Brain maintenance with live trade prices and vanilla hero gifts.",
+  "environment": "server",
+  "entrypoints": {
+    "main": [
+      "kr.harusarri.neodymium2.Neodymium2"
+    ]
+  },
+  "mixins": [
+    "neodymium2.mixins.json"
+  ],
+  "depends": {
+    "fabricloader": ">=0.19.3",
+    "minecraft": "26.3",
+    "java": ">=25",
+    "fabric-api": ">=0.161.0",
+    "servercore": "1.5.20+26.3"
+  },
+  "suggests": {
+    "yawp": "*",
+    "yawpmanager": ">=2.2.22"
+  }
+}

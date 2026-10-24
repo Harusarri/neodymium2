@@ -1,0 +1,36 @@
+# Build & test outputs
+build/
+runtime/
+evidence/
+logs/
+ops/
+original/
+patched/
+src/original/
+src/patched/
+src/yawpmanager/
+src/patch.diff
+tests/server/
+tests/fixtures/
+*.zip
+*.tar.gz
+*.log
+*.class
+
+# Internal deployment & benchmark reports
+DEPLOYMENT-*.md
+PATCH-PLAN.md
+PREVIOUS-*.md
+TECHNICAL_REPORT.md
+TEST-REPORT.md
+MANUAL.md
+ARCHIVE-SHA256SUMS
+PACKAGE-SHA256SUMS
+tools/archive_*.py
+tools/export_*.py
+tools/run_*.py
+tools/validate_*.py
+tools/SparkTreeExport.java
+
+# External bridge artifacts
+release/YAWPManager-*.jar
