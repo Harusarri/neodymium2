@@ -1,21 +1,21 @@
 <div align="center">
   <img src="src/main/resources/assets/neodymium2/icon.png?v=rc8" alt="Neodymium 2 Logo" width="160" height="160" />
   <h1>Neodymium 2</h1>
-  <p><strong>Smart server performance mod that speeds up your world without breaking player farms or redstone (Minecraft 26.3 Fabric).</strong></p>
+  <p><strong>Selectable server optimization for Minecraft 26.3 Fabric — you choose where to keep 100% vanilla mechanics and where to optimize for TPS.</strong></p>
 </div>
 
 ---
 
 ## What It Does
 
-Most performance mods slow down mobs, villagers, and world ticks everywhere—which often breaks technical builds, redstone contraptions, and trading halls.
+Most optimization mods force the same slowdown rules across the entire server, leaving server owners with an all-or-nothing choice between smooth TPS and working redstone/farms.
 
-**Neodymium 2** solves this by separating **Protected Regions** from the rest of the world:
+**Neodymium 2** puts **control in your hands** with **selectable, area-based optimization**:
 
-* **100% Vanilla Inside Protected Areas**: Any area you mark as protected runs at full vanilla speed so sensitive redstone machines, farms, and villager setups never break.
-* **Heavy Optimization Everywhere Else**: In the open wilderness, distant mobs, idle villagers, and unused chunks use much less CPU so your server stays at a smooth **20 TPS**.
-* **Farm-Friendly Wilderness Spawning**: Cuts out laggy deep-cave mob spawns in the wilderness while keeping standard overworld mob farms working properly.
-* **Works Standalone or with Region Plugins**: Protect chunks directly using built-in `/neodymium2 chunk` commands, or connect an external region mod like `YAWPManager`.
+* **You Choose What Stays 100% Vanilla**: Mark any chunk or region (redstone contraptions, technical farms, trading halls) as protected, and it will always run at full vanilla speed without interference.
+* **Optimize Everything Else**: Outside those selected areas, distant mobs, idle villagers, and unused chunks are throttled to keep your server running at a smooth **20 TPS**.
+* **Farm-Friendly Wilderness Spawning**: Cuts out laggy deep-cave spawns in the wilderness while keeping standard overworld mob farms working as expected.
+* **Flexible Control (Standalone or Plugin-Linked)**: Select protected chunks directly with `/neodymium2 chunk` commands, or let players/admins toggle protection through an external region mod like `YAWPManager`.
 
 ---
 
