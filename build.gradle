@@ -28,6 +28,7 @@ repositories {
 sourceSets {
     compileOnlyStubs {
         java.srcDirs = ['src/compileOnly/java']
+        compileClasspath += configurations.compileClasspath
     }
     main {
         compileClasspath += sourceSets.compileOnlyStubs.output

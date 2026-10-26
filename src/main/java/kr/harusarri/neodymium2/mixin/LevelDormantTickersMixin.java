@@ -60,6 +60,9 @@ public abstract class LevelDormantTickersMixin implements LevelDormantTickersAcc
     private boolean neo$needsChunkSort;
 
     @Unique
+    private long neo$lastSortGameTime = Long.MIN_VALUE;
+
+    @Unique
     private long neo$lastParkedRegionGen = -1L;
 
     @Override
@@ -86,23 +89,22 @@ public abstract class LevelDormantTickersMixin implements LevelDormantTickersAcc
 
     @Inject(method = "addBlockEntityTicker", at = @At("HEAD"))
     private void neo$bindWrapperLevelOnAdd(TickingBlockEntity ticker, CallbackInfo ci) {
+        Level self = (Level) (Object) this;
         if (ticker instanceof DormantTickingWrapper wrapper) {
-            wrapper.neo$bindLevel((Level) (Object) this);
+            wrapper.neo$bindLevel(self);
+            if (wrapper.neo$getCachedSortKey(self, Neodymium2.snapshot().generation()) != Long.MIN_VALUE) {
+                this.neo$needsChunkSort = true;
+            }
         }
-        this.neo$needsChunkSort = true;
     }
 
     @Unique
-    private static long neo$chunkSortKey(Level level, TickingBlockEntity ticker) {
-        BlockPos pos = ticker.getPos();
-        if (pos == null) {
-            if (ticker instanceof DormantTickingWrapper w && w.neo$getLastKnownPos() != null) {
-                pos = w.neo$getLastKnownPos();
-            } else {
-                return Long.MIN_VALUE;
-            }
+    private static long neo$chunkSortKey(Level level, long regionGen, TickingBlockEntity ticker) {
+        if (ticker instanceof DormantTickingWrapper w) {
+            return w.neo$getCachedSortKey(level, regionGen);
         }
-        if (Neodymium2.regionProtectsBlock(level, pos)) {
+        BlockPos pos = ticker.getPos();
+        if (pos == null || Neodymium2.regionProtectsBlock(level, pos)) {
             return Long.MIN_VALUE;
         }
         long ck = ChunkPos.pack(pos);
@@ -113,7 +115,8 @@ public abstract class LevelDormantTickersMixin implements LevelDormantTickersAcc
     private void neo$fastTickBlockEntities(CallbackInfo ci) {
         long currentGen = Neodymium2.snapshot().generation();
         boolean tight = OutsideWorldOptimizer.enabled();
-        if (!this.neo$parkedSleepingTickers.isEmpty() && (!tight || currentGen != this.neo$lastParkedRegionGen)) {
+        boolean genChanged = currentGen != this.neo$lastParkedRegionGen;
+        if (!this.neo$parkedSleepingTickers.isEmpty() && (!tight || genChanged)) {
             this.neo$lastParkedRegionGen = currentGen;
             for (TickingBlockEntity ticker : this.neo$parkedSleepingTickers) {
                 if (ticker instanceof DormantTickingWrapper wrapper) {
@@ -150,16 +153,21 @@ public abstract class LevelDormantTickersMixin implements LevelDormantTickersAcc
                     }
                 }
                 this.blockEntityTickers.add(pending);
-                if (p != null) {
+                if (p != null && neo$chunkSortKey(self, currentGen, pending) != Long.MIN_VALUE) {
                     this.neo$needsChunkSort = true;
                 }
             }
             this.pendingBlockEntityTickers.clear();
         }
 
-        if (this.neo$needsChunkSort && this.blockEntityTickers.size() > 1) {
+        long gameTime = self.getGameTime();
+        if (this.neo$needsChunkSort && this.blockEntityTickers.size() > 1
+                && (genChanged || gameTime - this.neo$lastSortGameTime >= 200L || this.neo$lastSortGameTime == Long.MIN_VALUE)) {
             this.neo$needsChunkSort = false;
-            this.blockEntityTickers.sort((a, b) -> Long.compare(neo$chunkSortKey(self, a), neo$chunkSortKey(self, b)));
+            this.neo$lastSortGameTime = gameTime;
+            this.blockEntityTickers.sort((a, b) -> Long.compare(
+                    neo$chunkSortKey(self, currentGen, a),
+                    neo$chunkSortKey(self, currentGen, b)));
         }
 
         int epoch = OutsideWorldOptimizer.beginBlockEntityTickPass();

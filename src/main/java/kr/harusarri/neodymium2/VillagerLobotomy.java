@@ -2,6 +2,8 @@ package kr.harusarri.neodymium2;
 
 import kr.harusarri.neodymium2.core.FastEntityTagSet;
 import kr.harusarri.neodymium2.mixin.BrainMaintenanceAccess;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import net.minecraft.core.GlobalPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.ai.behavior.*;
@@ -9,6 +11,7 @@ import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.minecraft.world.entity.ai.village.poi.PoiTypes;
 import net.minecraft.world.entity.npc.villager.*;
 import net.minecraft.world.entity.schedule.Activity;
+import net.minecraft.world.level.chunk.LevelChunk;
 
 /** LibertyEngine's trader dormancy, with vanilla bookkeeping and reversible region/name exemptions. */
 public final class VillagerLobotomy {
@@ -27,6 +30,34 @@ public final class VillagerLobotomy {
         }
         return tags.contains("exclude_lobotomization")||tags.contains("exclude_ear");
     }
+    public static boolean shouldThrottleActiveOutsideBrain(Villager v,ServerLevel level){
+        if(!enabled()||!OutsideEntityOptimizer.enabled()||Neodymium2.regionProtects(v)||hasExemptTag(v))return false;
+        if(v.hurtTime>0||v.isTrading()||v.isInWater()||v.isInLava()||v.isOnFire()||OutsideEntityOptimizer.isInteractiveOrBreeding(v))return false;
+        var brain=v.getBrain();
+        if(brain.hasMemoryValue(MemoryModuleType.HURT_BY)||brain.hasMemoryValue(MemoryModuleType.NEAREST_HOSTILE)||brain.isActive(Activity.PANIC))return false;
+        double distSq=Math.min(16384.0,PlayerSpatialGrid.distSqToNearestPlayer(level,v));
+        int gear=OutsideWorldOptimizer.msptGear(level.getServer());
+        int interval=Math.min(12,(2<<gear)+((int)distSq>>6));
+        if(Math.floorMod(v.getId()+v.tickCount,interval)!=0){
+            ((BrainMaintenanceAccess)brain).neo$forgetOutdatedMemories();
+            if(vanilla>0)vanilla--;
+            skipped++;
+            return true;
+        }
+        return false;
+    }
+    private static boolean canStepTo(ServerLevel level,int x,int y,int z){
+        var chunk=level.getChunkSource().getChunkNow(x>>4,z>>4);
+        if(chunk==null)return false;
+        BlockPos p=new BlockPos(x,y,z);
+        return isPassableStep(level,chunk,p)||isPassableStep(level,chunk,p.above())||isPassableStep(level,chunk,p.below());
+    }
+    private static boolean isPassableStep(ServerLevel level,LevelChunk chunk,BlockPos p){
+        if(chunk.getBlockState(p.below()).getCollisionShape(level,p.below()).isEmpty())return false;
+        var body=chunk.getBlockState(p).getCollisionShape(level,p);
+        if(!body.isEmpty()&&body.max(Direction.Axis.Y)>0.5)return false;
+        return chunk.getBlockState(p.above()).getCollisionShape(level,p.above()).isEmpty();
+    }
     public static final class State {
         private final WorkAtPoi workstation=new WorkAtPoi();
         private final VillagerGifts gifts=new VillagerGifts();
@@ -36,8 +67,21 @@ public final class VillagerLobotomy {
         private boolean stationValid,dormant;
         private long nextIdleRaidCheck;
         private boolean idleRaid;
+        private long cachedBoxedPos=Long.MIN_VALUE,nextBoxedCheck;
+        private boolean boxedIn;
         public boolean dormant(){return dormant;}
         public void wake(Villager v,int ticks){awakeUntil=Math.max(awakeUntil,v.level().getGameTime()+ticks);}
+        private boolean isBoxedIn(Villager v,ServerLevel level,long now){
+            BlockPos pos=v.blockPosition();
+            long posLong=pos.asLong();
+            if(posLong!=cachedBoxedPos||now>=nextBoxedCheck){
+                cachedBoxedPos=posLong;
+                nextBoxedCheck=now+40;
+                int bx=pos.getX(),by=pos.getY(),bz=pos.getZ();
+                boxedIn=!canStepTo(level,bx+1,by,bz)&&!canStepTo(level,bx-1,by,bz)&&!canStepTo(level,bx,by,bz+1)&&!canStepTo(level,bx,by,bz-1);
+            }
+            return boxedIn;
+        }
         private boolean validStation(Villager v,ServerLevel level,long now){
             var job=v.getBrain().getMemory(MemoryModuleType.JOB_SITE).orElse(null);
             if(job==null||!job.dimension().equals(level.dimension())||!job.pos().closerToCenterThan(v.position(),1.73))return false;
@@ -70,13 +114,13 @@ public final class VillagerLobotomy {
                 if(brain.hasMemoryValue(MemoryModuleType.POTENTIAL_JOB_SITE)||brain.hasMemoryValue(MemoryModuleType.JOB_SITE))return false;
                 return true;
             }
-            return validStation(v,level,now);
+            return validStation(v,level,now)||(cfg.idleVillagersEnabled()&&isBoxedIn(v,level,now));
         }
         public boolean suppress(Villager v,ServerLevel level){
             long now=level.getGameTime();var snap=Neodymium2.snapshot();
             gifts.brainChanged(v);
             jobs.brainChanged(v);
-            if(generation!=snap.generation()){generation=snap.generation();nextStationCheck=0;nextMaintenance=0;nextIdleRaidCheck=0;cachedJob=null;}
+            if(generation!=snap.generation()){generation=snap.generation();nextStationCheck=0;nextMaintenance=0;nextIdleRaidCheck=0;cachedJob=null;cachedBoxedPos=Long.MIN_VALUE;nextBoxedCheck=0;}
             if(!eligible(v,level,now)){
                 if(workstation.getStatus()==Behavior.Status.RUNNING)workstation.doStop(level,v,now);
                 dormant=false;

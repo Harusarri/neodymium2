@@ -8,4 +8,5 @@ public interface DormantTickingWrapper {
     BlockPos neo$getLastKnownPos();
     boolean neo$isUnlinked();
     void neo$setUnlinked(boolean unlinked);
+    long neo$getCachedSortKey(Level level, long regionGen);
 }

@@ -60,6 +60,11 @@ public abstract class EntityLookupMixin<T extends EntityAccess> implements Entit
         return bucket != null && !bucket.isEmpty();
     }
 
+    @Override
+    public java.util.Collection<?> neo$getMobValues() {
+        return this.neo$mobs.values();
+    }
+
     @Inject(
         method = "add",
         at = @At(
@@ -162,7 +167,7 @@ public abstract class EntityLookupMixin<T extends EntityAccess> implements Entit
     @Inject(method = "getAllEntities", at = @At("HEAD"), cancellable = true)
     private void neo$getMobsOnlyForCreateState(CallbackInfoReturnable<Iterable<T>> cir) {
         if (RegionSpawner.isMobOnlyIteration()) {
-            RegionSpawner.recordMobOnlyCreateStateScan();
+            RegionSpawner.onGetMobsForCreateState(this.neo$mobs.values());
             cir.setReturnValue(Iterables.unmodifiableIterable(this.neo$mobs.values()));
         }
     }

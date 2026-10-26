@@ -14,16 +14,23 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 @Mixin(value = Mob.class, priority = 900)
 public abstract class MobTightMixin {
+    @Inject(method = "checkDespawn", at = @At("HEAD"), cancellable = true)
+    private void neo$fastOutsideCheckDespawn(CallbackInfo ci) {
+        if (OutsideEntityOptimizer.fastOutsideCheckDespawn((Mob) (Object) this)) {
+            ci.cancel();
+        }
+    }
+
     @Inject(method = "serverAiStep", at = @At("HEAD"), cancellable = true)
     private void neo$tightOutsideAi(CallbackInfo ci) {
         Mob self = (Mob) (Object) this;
         if (OutsideEntityOptimizer.shouldSkipAi(self)) {
             if (!self.getNavigation().isDone()) {
                 self.getNavigation().tick();
+                self.getMoveControl().tick();
+                self.getLookControl().tick();
+                self.getJumpControl().tick();
             }
-            self.getMoveControl().tick();
-            self.getLookControl().tick();
-            self.getJumpControl().tick();
             ci.cancel();
         }
     }

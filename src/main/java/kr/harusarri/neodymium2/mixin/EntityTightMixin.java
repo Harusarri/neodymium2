@@ -54,6 +54,9 @@ public abstract class EntityTightMixin implements EntityFastStateAccess {
     @Unique private Level neo$protLevel;
     @Unique private boolean neo$protResult;
 
+    @Unique private int neo$playerDistTick = Integer.MIN_VALUE;
+    @Unique private double neo$playerDistSq = Double.MAX_VALUE;
+
     @Unique private long neo$yawpMobGriefGen = -1L;
     @Unique private long neo$yawpMobGriefPos = Long.MIN_VALUE;
     @Unique private int neo$yawpMobGriefUntilTick = -1;
@@ -118,6 +121,21 @@ public abstract class EntityTightMixin implements EntityFastStateAccess {
                 this.setDeltaMovement(0.0, 0.0, 0.0);
             }
             ci.cancel();
+            return;
+        }
+        if (type == MoverType.SELF
+            && (Object) this instanceof net.minecraft.world.entity.vehicle.boat.AbstractBoat boat
+            && !this.noPhysics
+            && !boat.isPassenger()
+            && !boat.isVehicle()
+            && Math.abs(movement.x) <= 1.0E-5
+            && Math.abs(movement.z) <= 1.0E-5
+            && Math.abs(movement.y) <= 0.05
+            && ((boat.getId() + boat.tickCount) & 7) != 0
+            && OutsideWorldOptimizer.enabled()
+            && boat.level() instanceof net.minecraft.server.level.ServerLevel
+            && !kr.harusarri.neodymium2.Neodymium2.regionProtects(boat)) {
+            ci.cancel();
         }
     }
 
@@ -133,12 +151,20 @@ public abstract class EntityTightMixin implements EntityFastStateAccess {
             BlockPos supportPos = this.mainSupportingBlockPos.get();
             Level lvl = this.level();
             BlockState supportState = lvl.getBlockState(supportPos);
+            BlockPos feetPos = this.blockPosition();
+            BlockState feetState = feetPos.equals(supportPos) ? supportState : lvl.getBlockState(feetPos);
             if (!supportState.isAir()
                 && !supportState.is(Blocks.MAGMA_BLOCK)
                 && !supportState.is(Blocks.SLIME_BLOCK)
                 && !supportState.is(Blocks.HONEY_BLOCK)
                 && !supportState.is(Blocks.BUBBLE_COLUMN)
-                && lvl.getBlockState(this.blockPosition()).isAir()) {
+                && (feetState.isAir()
+                    || feetPos.equals(supportPos)
+                    || (feetState.getCollisionShape(lvl, feetPos).isEmpty()
+                        && feetState.getFluidState().isEmpty()
+                        && !feetState.is(Blocks.TRIPWIRE)
+                        && !(feetState.getBlock() instanceof net.minecraft.world.level.block.BasePressurePlateBlock)
+                        && !(feetState.getBlock() instanceof net.minecraft.world.level.block.BaseFireBlock)))) {
                 this.neo$lastRestingPos = this.position();
                 this.neo$lastSupportPos = supportPos;
                 this.neo$lastSupportState = supportState;
@@ -158,6 +184,14 @@ public abstract class EntityTightMixin implements EntityFastStateAccess {
         this.neo$protBb = bb;
         this.neo$protLevel = level;
         this.neo$protResult = result;
+    }
+
+    @Override public int neo$getPlayerDistTick() { return this.neo$playerDistTick; }
+    @Override public double neo$getPlayerDistSq() { return this.neo$playerDistSq; }
+    @Override
+    public void neo$setPlayerDistCache(int tick, double distSq) {
+        this.neo$playerDistTick = tick;
+        this.neo$playerDistSq = distSq;
     }
 
     @Override public long neo$getYawpMobGriefGen() { return this.neo$yawpMobGriefGen; }

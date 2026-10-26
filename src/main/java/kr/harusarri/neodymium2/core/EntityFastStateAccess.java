@@ -12,6 +12,10 @@ public interface EntityFastStateAccess {
     boolean neo$getProtResult();
     void neo$setProtCache(long gen, AABB bb, Level level, boolean result);
 
+    int neo$getPlayerDistTick();
+    double neo$getPlayerDistSq();
+    void neo$setPlayerDistCache(int tick, double distSq);
+
     long neo$getYawpMobGriefGen();
     long neo$getYawpMobGriefPos();
     int neo$getYawpMobGriefUntilTick();

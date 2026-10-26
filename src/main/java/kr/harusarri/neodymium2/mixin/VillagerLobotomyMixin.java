@@ -27,7 +27,9 @@ public abstract class VillagerLobotomyMixin implements VillagerDormantAccess {
     @WrapOperation(method="customServerAiStep",at=@At(value="INVOKE",target="Lnet/minecraft/world/entity/ai/Brain;tick(Lnet/minecraft/server/level/ServerLevel;Lnet/minecraft/world/entity/LivingEntity;)V"))
     private void neo$brain(Brain<?> brain,ServerLevel level,LivingEntity entity,Operation<Void> original){
         if(neo$lobotomy==null&&VillagerLobotomy.enabled())neo$lobotomy=new VillagerLobotomy.State();
-        if(neo$lobotomy==null||!neo$lobotomy.suppress((Villager)entity,level))original.call(brain,level,entity);
+        Villager v=(Villager)entity;
+        if(neo$lobotomy!=null&&(neo$lobotomy.suppress(v,level)||VillagerLobotomy.shouldThrottleActiveOutsideBrain(v,level)))return;
+        original.call(brain,level,entity);
     }
     @Inject(method="rewardTradeXp",at=@At("HEAD"))
     private void neo$trade(MerchantOffer offer,CallbackInfo ci){

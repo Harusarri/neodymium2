@@ -50,7 +50,7 @@ public final class OutsideEntityOptimizer {
 
     private static long protectedAiTicks, skippedAiTicks, protectedPushTicks, skippedPushTicks;
     private static long retainedSensingTicks, throttledPathSearches, throttledItemMerges, throttledXpScans;
-    private static long skippedStaticTrackerUpdates, skippedDormantTravelTicks;
+    private static long skippedStaticTrackerUpdates, skippedDormantTravelTicks, fastDespawnChecks;
 
     private OutsideEntityOptimizer() {}
 
@@ -105,11 +105,11 @@ public final class OutsideEntityOptimizer {
         if (mob instanceof EntityFastStateAccess access && mob.tickCount < access.neo$getInteractAwakeUntilTick()) {
             return true;
         }
-        if (mob instanceof Villager v && (v.isTrading() || (!v.isBaby() && v.canBreed()))) {
+        if (mob instanceof Villager v && (v.isTrading() || (!v.isBaby() && v.canBreed()) || v.hurtTime > 0 || v.getLastHurtByMob() != null)) {
             return true;
         }
         if (mob instanceof Animal animal) {
-            if (animal.isInLove() || animal.isPanicking() || animal.getLoveCause() != null) {
+            if (animal.isInLove() || animal.hurtTime > 0 || animal.getLastHurtByMob() != null || animal.getRemainingFireTicks() > 0 || animal.getLoveCause() != null) {
                 return true;
             }
             if (mob.level() instanceof ServerLevel level && PlayerSpatialGrid.hasFoodHoldingPlayerWithin(level, animal, 100.0)) {
@@ -125,7 +125,10 @@ public final class OutsideEntityOptimizer {
     }
 
     private static boolean isCombatOrInteractive(Mob mob) {
-        if (mob.hurtTime > 0 || !mob.isAlive() || mob.getRemainingFireTicks() > 0 || mob.isVehicle() || mob.isPassenger() || mob.isLeashed() || mob.getTarget() != null) {
+        if (mob.hurtTime > 0 || !mob.isAlive() || mob.getRemainingFireTicks() > 0 || mob.isVehicle() || mob.isPassenger() || mob.getTarget() != null) {
+            return true;
+        }
+        if (mob.isLeashed() && mob.getLeashHolder() instanceof Player) {
             return true;
         }
         if (mob instanceof net.minecraft.world.entity.monster.Creeper c && c.isIgnited()) return true;
@@ -133,28 +136,19 @@ public final class OutsideEntityOptimizer {
     }
 
     /**
-     * Paper / Low-Level Mob Farm Monster Activation:
-     * Keeps monsters (Enemy) in the player's active mob-farm column (<= 48m horizontal, <= 128m 3D,
-     * excluding deep caves y < 32 far below the player) active in EAR so water canals, drop chutes,
-     * trapdoor walk-off, and despawn timers function reliably without waking deep underground caves.
+     * Paper / Pufferfish Water-Canal & Drop-Chute Mob Farm Monster Activation:
+     * Dry-ground monsters outside ServerCore's activationRange remain 100% governed by EAR and DAB
+     * (never waking underground cave monsters or causing gear oscillation).
+     * Only monsters actively being flushed in flowing water or falling down a drop chute within 64m 3D (y >= 48)
+     * are kept active so water-canal and drop-chute mob farms flow without stalling.
      */
     public static boolean isActiveMobFarmMonster(Mob mob) {
-        if (!(mob instanceof net.minecraft.world.entity.monster.Enemy) || !enabled()) return false;
-        if (!(mob.level() instanceof ServerLevel level) || level.players().isEmpty()) return false;
-        int gear = OutsideWorldOptimizer.msptGear(level.getServer());
-        if (gear >= 2) return false;
-        double maxHoriz = (gear == 1 || level.players().size() >= 20) ? 40.0 : 48.0;
-        double horizDistSq = PlayerSpatialGrid.horizDistSqToNearestPlayer(level, mob.getX(), mob.getZ());
-        if (horizDistSq > maxHoriz * maxHoriz) return false;
-        double dist3dSq = PlayerSpatialGrid.distSqToNearestPlayer(level, mob.getX(), mob.getY(), mob.getZ());
-        if (dist3dSq > 128.0 * 128.0) return false;
-        if (level.dimension() == net.minecraft.world.level.Level.OVERWORLD && mob.getBlockY() < 32) {
-            int playerY = PlayerSpatialGrid.nearestPlayerBlockY(level, mob.getX(), mob.getZ());
-            if (playerY - mob.getBlockY() > 56) {
-                return false;
-            }
-        }
-        return true;
+        if (!(mob instanceof net.minecraft.world.entity.monster.Enemy) || mob instanceof net.minecraft.world.entity.monster.warden.Warden || !enabled()) return false;
+        boolean falling = !mob.onGround() && mob.fallDistance > 1.0F;
+        boolean flushingInWater = mob.isInWater() && mob.getDeltaMovement().horizontalDistanceSqr() > 4.0E-4;
+        if (!falling && !flushingInWater) return false;
+        if (mob.getBlockY() < 48 || !(mob.level() instanceof ServerLevel level)) return false;
+        return PlayerSpatialGrid.distSqToNearestPlayer(level, mob) <= 64.0 * 64.0;
     }
 
     /**
@@ -171,51 +165,22 @@ public final class OutsideEntityOptimizer {
         }
         if (isCombatOrInteractive(mob)) return false;
         if (mob.isOnPortalCooldown() || (mob.portalProcess != null && mob.portalProcess.isInsidePortalThisTick())) return false;
-        if (mob instanceof ActivationEntity ae && ae.servercore$isInactive()) return false;
 
         int tick = (int) level.getGameTime();
         int density = OutsideSpawnAndDensity.recordAndGetChunkDensity(mob, tick);
-        int gear = OutsideWorldOptimizer.msptGear(level.getServer());
-        double distSq = Math.min(16384.0, PlayerSpatialGrid.distSqToNearestPlayer(level, mob.getX(), mob.getY(), mob.getZ()));
-        if (density <= 32 && gear == 0 && distSq <= 48.0 * 48.0) {
-            // Within 48m under normal MSPT: preserve 1-tick buoyancy, swimming, and flight goals
-            // for nearby lava mobs, aquatic monsters (Drowned/Guardian), and flying mobs.
-            var cat = mob.getType().getCategory();
-            boolean passiveFishOrSquid = cat == net.minecraft.world.entity.MobCategory.WATER_AMBIENT
-                || cat == net.minecraft.world.entity.MobCategory.WATER_CREATURE
-                || cat == net.minecraft.world.entity.MobCategory.UNDERGROUND_WATER_CREATURE;
-            if (mob.isInLava()
-                || (!passiveFishOrSquid && (mob.isInWater() || !mob.onGround() || mob.isNoGravity()))) {
-                if (mob instanceof net.minecraft.world.entity.monster.Enemy && mob.getNoActionTime() > 60 && mob.tickCount < 1200) {
-                    mob.setNoActionTime(0);
-                }
-                return false;
-            }
-        }
         int interval;
-        if (mob instanceof net.minecraft.world.entity.monster.Enemy && isActiveMobFarmMonster(mob)) {
-            // Prevent Vanilla RandomStrollGoal freeze (noActionTime >= 100 when 3D distance > 32m)
-            // for up to 60 seconds after spawn so monsters in classic dark-room mob towers continuously
-            // pathfind/wander into water canals even when the player stands 32-48m below the platforms.
-            if (mob.getNoActionTime() > 60 && mob.tickCount < 1200) {
-                mob.setNoActionTime(0);
-            }
-            if (density <= 32 && gear == 0 && level.players().size() < 25) {
-                return false;
-            }
-            if (!mob.getNavigation().isDone() || mob.isInWater() || mob.isInLava()) {
-                return false;
-            }
-            interval = density > 48 ? 8 : 2;
-        } else if (density > OutsideSpawnAndDensity.OVERCROWD_THRESHOLD) {
+        if (density > OutsideSpawnAndDensity.OVERCROWD_THRESHOLD) {
             interval = 20;
         } else {
+            double distSq = Math.min(16384.0, PlayerSpatialGrid.distSqToNearestPlayer(level, mob));
+            int gear = OutsideWorldOptimizer.msptGear(level.getServer());
             boolean heavyBrain = TIGHT_AI_TYPES.contains(mob.getType());
             int base = (heavyBrain ? 8 : 4) << gear;
             int shift = PASSIVE_NO_COLLISION.contains(mob.getType()) ? 5 : 6;
             interval = Math.min(20, base + ((int) distSq >> shift));
         }
         if (Math.floorMod(mob.getId() + mob.tickCount, interval) != 0) {
+            mob.setNoActionTime(mob.getNoActionTime() + 1);
             skippedAiTicks++;
             return true;
         }
@@ -244,7 +209,7 @@ public final class OutsideEntityOptimizer {
     public static boolean shouldThrottlePathSearch(Mob mob, int ticksSinceLastSearch) {
         if (ticksSinceLastSearch < 0 || ticksSinceLastSearch >= 20) return false;
         if (!enabled() || !(mob.level() instanceof ServerLevel)) return false;
-        if (mob instanceof Villager || mob instanceof WanderingTrader || isExempt(mob) || isCombatOrInteractive(mob) || isActiveMobFarmMonster(mob) || Neodymium2.regionProtects(mob)) return false;
+        if (mob instanceof Villager || mob instanceof WanderingTrader || isExempt(mob) || isCombatOrInteractive(mob) || Neodymium2.regionProtects(mob)) return false;
         throttledPathSearches++;
         return true;
     }
@@ -256,7 +221,7 @@ public final class OutsideEntityOptimizer {
             protectedPushTicks++;
             return false;
         }
-        if (entity.hurtTime > 0 || entity.isVehicle() || entity.isPassenger() || isInteractiveOrBreeding(mob) || isActiveMobFarmMonster(mob)) return false;
+        if (entity.hurtTime > 0 || entity.isVehicle() || entity.isPassenger() || isInteractiveOrBreeding(mob)) return false;
         if (PASSIVE_NO_COLLISION.contains(entity.getType())) {
             skippedPushTicks++;
             return true;
@@ -277,10 +242,10 @@ public final class OutsideEntityOptimizer {
     }
 
     /**
-     * Dormant Outside Villager Travel Striding:
+     * Dormant Outside Villager & Distant Ambient Travel Striding:
      * Skips 3 out of 4 redundant LivingEntity.travel(Vec3) -> Entity.move(MoverType.SELF) -> Shapes.collide
-     * and Level.findSupportingBlock evaluations for stationary dry-ground dormant villagers outside
-     * vanillaSensitive regions.
+     * and Level.findSupportingBlock evaluations for stationary dry-ground dormant villagers and
+     * distant (>32m) ambient/water creatures outside vanillaSensitive regions.
      */
     public static boolean shouldSkipDormantVillagerTravel(LivingEntity self, Vec3 travelVector) {
         if (!(self instanceof VillagerDormantAccess v) || !v.neo$isDormantVillager() || !enabled()) {
@@ -297,6 +262,79 @@ public final class OutsideEntityOptimizer {
             return true;
         }
         return false;
+    }
+
+    public static boolean shouldSkipOutsideTravel(LivingEntity self, Vec3 travelVector) {
+        if (shouldSkipDormantVillagerTravel(self, travelVector)) {
+            return true;
+        }
+        var cat = self.getType().getCategory();
+        if ((cat == net.minecraft.world.entity.MobCategory.AMBIENT
+             || cat == net.minecraft.world.entity.MobCategory.WATER_AMBIENT
+             || cat == net.minecraft.world.entity.MobCategory.WATER_CREATURE
+             || cat == net.minecraft.world.entity.MobCategory.UNDERGROUND_WATER_CREATURE)
+            && enabled()
+            && self.level() instanceof ServerLevel level
+            && self.hurtTime == 0
+            && !self.isPassenger()
+            && !self.isVehicle()
+            && !(self instanceof Mob mob && mob.isLeashed())
+            && !isExempt(self)
+            && PlayerSpatialGrid.distSqToNearestPlayer(level, self) > 64.0
+            && !Neodymium2.regionProtects(self)) {
+            if (((self.getId() + self.tickCount) & 3) != 0) {
+                skippedDormantTravelTicks++;
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Purpur / Pufferfish Fast O(1) Mob.checkDespawn & Underground Cave-Trash Lifespan:
+     * 1. Immediately skips checkDespawn() with zero player scans for persistent / non-despawning
+     *    mobs (Villager, Animal, AbstractGolem, named/persistent mobs).
+     * 2. Inside vanillaSensitive regions, runs 100% untouched Vanilla checkDespawn().
+     * 3. In CHUNK_OUTSIDE, uses O(1) worker-precomputed PlayerSpatialGrid.distSqToNearestPlayer
+     *    instead of O(P) Level.getNearestPlayer(this, -1.0), and prevents inactive underground
+     *    cave mobs (<32m 3D beneath stationary players) from resetting noActionTime = 0 forever.
+     */
+    public static boolean fastOutsideCheckDespawn(Mob mob) {
+        if (!enabled() || !(mob.level() instanceof ServerLevel level) || level.getDifficulty() == net.minecraft.world.Difficulty.PEACEFUL) {
+            return false;
+        }
+        if (mob.isPersistenceRequired() || mob.requiresCustomPersistence() || !mob.removeWhenFarAway(Double.MAX_VALUE)) {
+            mob.setNoActionTime(0);
+            fastDespawnChecks++;
+            return true;
+        }
+        if (Neodymium2.regionProtects(mob)) {
+            return false;
+        }
+        double distSq = PlayerSpatialGrid.distSqToNearestPlayer(level, mob);
+        if (distSq == Double.MAX_VALUE) {
+            fastDespawnChecks++;
+            return true;
+        }
+        var category = mob.getType().getCategory();
+        int despawnDist = category.getDespawnDistance();
+        double despawnDistSq = (double) despawnDist * (double) despawnDist;
+        if (distSq > despawnDistSq && mob.removeWhenFarAway(distSq)) {
+            mob.discard();
+            fastDespawnChecks++;
+            return true;
+        }
+        int noDespawnDist = category.getNoDespawnDistance();
+        double noDespawnDistSq = (double) noDespawnDist * (double) noDespawnDist;
+        boolean inactive = mob instanceof ActivationEntity ae && ae.servercore$isInactive();
+        boolean activelyNearPlayer = !inactive && distSq < 256.0;
+        if (activelyNearPlayer || mob.getTarget() != null || mob.hurtTime > 0) {
+            mob.setNoActionTime(0);
+        } else if (mob.getNoActionTime() > 600 && (distSq > noDespawnDistSq || inactive) && mob.getRandom().nextInt(inactive ? 40 : 800) == 0 && mob.removeWhenFarAway(distSq)) {
+            mob.discard();
+        }
+        fastDespawnChecks++;
+        return true;
     }
 
     public static boolean shouldThrottleItemMerge(ItemEntity item) {
@@ -377,25 +415,19 @@ public final class OutsideEntityOptimizer {
         boolean wasOnGround,
         boolean trackDelta
     ) {
-        if (!(entity instanceof Mob mob) || !enabled() || !(mob.level() instanceof ServerLevel)) {
+        if (!(entity instanceof Mob mob) || (((mob.getId() + trackerTickCount) & 3) == 0)) {
             return false;
         }
-        if (isExempt(mob) || mob.hurtTime > 0 || mob.isLeashed() || isInteractiveOrBreeding(mob)) {
+        if (lastSentPos == null || !mob.position().equals(lastSentPos) || mob.onGround() != wasOnGround) {
             return false;
         }
-        if (mob.needsSync || mob.syncPosition || mob.getEntityData().isDirty()) {
+        if (mob.needsSync || mob.syncPosition || mob.hurtTime > 0 || mob.isLeashed() || mob.getEntityData().isDirty()) {
             return false;
         }
         if (!mob.getPassengers().isEmpty() || (lastPassengers != null && !lastPassengers.isEmpty()) || mob.isPassenger()) {
             return false;
         }
-        if (!mob.getAttributes().getAttributesToSync().isEmpty()) {
-            return false;
-        }
         if (trackerTickCount % ServerEntity.FORCED_POS_UPDATE_PERIOD == 0) {
-            return false;
-        }
-        if (lastSentPos == null || !mob.position().equals(lastSentPos) || mob.onGround() != wasOnGround) {
             return false;
         }
         if (Mth.packDegrees(mob.getYRot()) != lastSentYRot
@@ -406,14 +438,14 @@ public final class OutsideEntityOptimizer {
         if (trackDelta && (lastSentMovement == null || mob.getDeltaMovement().distanceToSqr(lastSentMovement) > 1.0E-6)) {
             return false;
         }
-        if (Neodymium2.regionProtects(mob)) {
+        if (!mob.getAttributes().getAttributesToSync().isEmpty()) {
             return false;
         }
-        if (((mob.getId() + trackerTickCount) & 3) != 0) {
-            skippedStaticTrackerUpdates++;
-            return true;
+        if (!enabled() || !(mob.level() instanceof ServerLevel) || isExempt(mob) || Neodymium2.regionProtects(mob)) {
+            return false;
         }
-        return false;
+        skippedStaticTrackerUpdates++;
+        return true;
     }
 
     public static long protectedAiTicks() { return protectedAiTicks; }
@@ -426,6 +458,7 @@ public final class OutsideEntityOptimizer {
     public static long throttledXpScans() { return throttledXpScans; }
     public static long skippedStaticTrackerUpdates() { return skippedStaticTrackerUpdates; }
     public static long skippedDormantTravelTicks() { return skippedDormantTravelTicks; }
+    public static long fastDespawnChecks() { return fastDespawnChecks; }
 
     public static void resetStats() {
         protectedAiTicks = 0;
@@ -438,12 +471,13 @@ public final class OutsideEntityOptimizer {
         throttledXpScans = 0;
         skippedStaticTrackerUpdates = 0;
         skippedDormantTravelTicks = 0;
+        fastDespawnChecks = 0;
     }
 
     public static String status() {
         return " · 외부 엔티티 최적화 " + (enabled() ? "ON" : "OFF")
             + "(AI보호/생략 " + protectedAiTicks + "/" + skippedAiTicks
             + ", 충돌보호/생략 " + protectedPushTicks + "/" + skippedPushTicks
-            + ", 시야캐시/길찾기/아이템·경험치/정적트래커/휴면이동절약 " + retainedSensingTicks + "/" + throttledPathSearches + "/" + (throttledItemMerges + throttledXpScans) + "/" + skippedStaticTrackerUpdates + "/" + skippedDormantTravelTicks + ")";
+            + ", 시야캐시/길찾기/아이템·경험치/정적트래커/휴면이동/고속디스폰 " + retainedSensingTicks + "/" + throttledPathSearches + "/" + (throttledItemMerges + throttledXpScans) + "/" + skippedStaticTrackerUpdates + "/" + skippedDormantTravelTicks + "/" + fastDespawnChecks + ")";
     }
 }

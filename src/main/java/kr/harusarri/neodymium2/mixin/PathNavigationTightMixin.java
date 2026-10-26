@@ -36,9 +36,12 @@ public abstract class PathNavigationTightMixin {
 
     @Inject(method = "createPath(Ljava/util/Set;IZIF)Lnet/minecraft/world/level/pathfinder/Path;", at = @At("HEAD"), cancellable = true)
     private void neo$throttleCreatePath(Set<BlockPos> targets, int regionOffset, boolean offsetUpward, int accuracy, float followRange, CallbackInfoReturnable<Path> cir) {
-        if (this.path != null && !this.path.isDone() && targets != null && targets.contains(this.path.getTarget())
-            && OutsideEntityOptimizer.shouldThrottlePathSearch(this.mob, this.mob.tickCount - this.neo$lastPathSearchTick)) {
-            cir.setReturnValue(this.path);
+        if (OutsideEntityOptimizer.shouldThrottlePathSearch(this.mob, this.mob.tickCount - this.neo$lastPathSearchTick)) {
+            if (this.path != null && !this.path.isDone() && targets != null && targets.contains(this.path.getTarget())) {
+                cir.setReturnValue(this.path);
+            } else {
+                cir.setReturnValue(null);
+            }
         } else {
             this.neo$lastPathSearchTick = this.mob.tickCount;
         }

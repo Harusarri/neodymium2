@@ -137,13 +137,17 @@ public final class OutsideWorldOptimizer {
             protectedChunkTicks++;
             return randomTickSpeed;
         }
-        double centerX = (cx << 4) + 8.0, centerZ = (cz << 4) + 8.0;
-        boolean playerNear = PlayerSpatialGrid.hasPlayerWithinHorizontal(level, centerX, centerZ, 2304.0); // 48 blocks horizontal radius
         int gear = msptGear(level.getServer());
-        if (!playerNear || gear > 0) {
-            int stride = (!playerNear ? 4 : 2) << gear; // 4, 8, or 16 ticks far; 2, 4, or 8 ticks near under load
-            long hash = cx * 0x9E3779B97F4A7C15L ^ cz * 0xBF58476D1CE4E5B9L;
-            if ((((hash >>> 32) + level.getGameTime()) & (stride - 1)) != 0) {
+        long hash = cx * 0x9E3779B97F4A7C15L ^ cz * 0xBF58476D1CE4E5B9L;
+        long phase = (hash >>> 32) + level.getGameTime();
+        if (gear > 0 && (phase & ((2 << gear) - 1)) != 0) {
+            throttledRandomTickChunks++;
+            return 0;
+        }
+        int farStride = 8 << gear;
+        if ((phase & (farStride - 1)) != 0) {
+            double centerX = (cx << 4) + 8.0, centerZ = (cz << 4) + 8.0;
+            if (!PlayerSpatialGrid.hasPlayerWithinHorizontal(level, centerX, centerZ, 2304.0)) {
                 throttledRandomTickChunks++;
                 return 0;
             }
@@ -202,7 +206,6 @@ public final class OutsideWorldOptimizer {
         }
         if (entity instanceof LivingEntity living && living.hurtTime > 0) return false;
         if (entity.getDeltaMovement().horizontalDistanceSqr() > 1.0E-4) return false;
-        if (entity instanceof Mob mob && OutsideEntityOptimizer.isActiveMobFarmMonster(mob)) return false;
         if (Neodymium2.regionProtects(entity)) {
             protectedFluidScans++;
             return false;
@@ -230,9 +233,6 @@ public final class OutsideWorldOptimizer {
             return false;
         }
         if (level.getBlockState(supportPos) != supportState) {
-            return false;
-        }
-        if (OutsideEntityOptimizer.isActiveMobFarmMonster(mob)) {
             return false;
         }
         if (Neodymium2.regionProtects(mob)) {

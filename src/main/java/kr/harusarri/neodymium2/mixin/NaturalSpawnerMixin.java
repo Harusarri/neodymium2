@@ -26,25 +26,34 @@ import net.minecraft.world.phys.AABB;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.ModifyVariable;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 import java.util.List;
 
 @Mixin(value = NaturalSpawner.class, priority = 900)
 public abstract class NaturalSpawnerMixin {
-    @WrapOperation(
+    @ModifyVariable(
         method = "createState",
-        at = @At(value = "INVOKE", target = "Lnet/minecraft/server/level/ServerLevel;getAllEntities()Ljava/lang/Iterable;")
+        at = @At("HEAD"),
+        argsOnly = true
     )
-    private static Iterable<Entity> neo$iterateOnlyMobsForCreateState(ServerLevel level, Operation<Iterable<Entity>> original) {
-        if (!RegionSpawner.beginMobOnlyIteration(level)) {
-            return original.call(level);
-        }
-        try {
-            return level.getAllEntities();
-        } finally {
-            RegionSpawner.endMobOnlyIteration();
-        }
+    private static NaturalSpawner.ChunkGetter neo$cacheCreateStateChunkGetter(NaturalSpawner.ChunkGetter chunkGetter) {
+        return RegionSpawner.wrapCreateStateChunkGetter(chunkGetter);
+    }
+
+    @ModifyVariable(
+        method = "createState",
+        at = @At("STORE"),
+        ordinal = 0
+    )
+    private static Iterable<Entity> neo$useMobOnlyCollectionForCreateState(
+        Iterable<Entity> originalEntities,
+        int spawnableChunkCount,
+        ServerLevel level
+    ) {
+        Iterable<Entity> fastMobs = RegionSpawner.tryGetMobsForCreateState(level);
+        return fastMobs != null ? fastMobs : originalEntities;
     }
 
     @Inject(method = "lambda$createState$0", at = @At("HEAD"), cancellable = true)
@@ -77,20 +86,6 @@ public abstract class NaturalSpawnerMixin {
         }
     }
 
-    @WrapOperation(
-        method = "spawnCategoryForChunk(Lnet/minecraft/world/entity/MobCategory;Lnet/minecraft/server/level/ServerLevel;Lnet/minecraft/world/level/chunk/LevelChunk;Lnet/minecraft/world/level/NaturalSpawner$SpawnPredicate;Lnet/minecraft/world/level/NaturalSpawner$AfterSpawnCallback;)V",
-        at = @At(value = "INVOKE", target = "Lnet/minecraft/world/level/NaturalSpawner;getRandomPosWithin(Lnet/minecraft/world/level/Level;Lnet/minecraft/world/level/chunk/LevelChunk;)Lnet/minecraft/core/BlockPos;")
-    )
-    private static BlockPos neo$resolveOutsideSpawnPos(
-        net.minecraft.world.level.Level level,
-        LevelChunk chunk,
-        Operation<BlockPos> original,
-        MobCategory category
-    ) {
-        BlockPos pos = original.call(level, chunk);
-        return RegionSpawner.resolveOutsideSpawnPos(level, chunk, category, pos);
-    }
-
     @Inject(method = "isRightDistanceToPlayerAndSpawnPoint", at = @At("HEAD"), cancellable = true)
     private static void neo$preFilter3dDespawnSphere(ServerLevel level, ChunkAccess chunk, BlockPos.MutableBlockPos pos, double distSqr, CallbackInfoReturnable<Boolean> cir) {
         if (RegionSpawner.shouldRejectOutsideSpawnPos(level, pos, distSqr)) {
@@ -112,6 +107,17 @@ public abstract class NaturalSpawnerMixin {
     )
     private static boolean neo$fastOutsideCollision(ServerLevel level, AABB bb, Operation<Boolean> original) {
         return OutsideSpawnAndDensity.doesNotCollide(level, bb, original);
+    }
+
+    @WrapOperation(
+        method = "spawnCategoryForPosition(Lnet/minecraft/world/entity/MobCategory;Lnet/minecraft/server/level/ServerLevel;Lnet/minecraft/world/level/chunk/ChunkAccess;Lnet/minecraft/core/BlockPos;Lnet/minecraft/world/level/NaturalSpawner$SpawnPredicate;Lnet/minecraft/world/level/NaturalSpawner$AfterSpawnCallback;)V",
+        at = @At(value = "INVOKE", target = "Lnet/minecraft/server/level/ServerLevel;getNearestPlayer(DDDDZ)Lnet/minecraft/world/entity/player/Player;")
+    )
+    private static net.minecraft.world.entity.player.Player neo$fastOutsideNearestPlayer(ServerLevel level, double x, double y, double z, double maxDist, boolean ignoreSpectators, Operation<net.minecraft.world.entity.player.Player> original) {
+        if (!ignoreSpectators && maxDist < 0.0 && RegionSpawner.enabled() && !RegionSpawner.isInsideProtectedChunk()) {
+            return kr.harusarri.neodymium2.PlayerSpatialGrid.findNearestPlayerForSpawn(level, x, y, z);
+        }
+        return original.call(level, x, y, z, maxDist, ignoreSpectators);
     }
 
     @WrapOperation(

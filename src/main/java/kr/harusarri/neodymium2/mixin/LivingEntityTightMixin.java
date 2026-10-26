@@ -1,5 +1,8 @@
 package kr.harusarri.neodymium2.mixin;
 
+import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
+import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
+import kr.harusarri.neodymium2.Neodymium2;
 import kr.harusarri.neodymium2.OutsideEntityOptimizer;
 import kr.harusarri.neodymium2.OutsideWorldOptimizer;
 import net.minecraft.core.BlockPos;
@@ -20,6 +23,44 @@ public abstract class LivingEntityTightMixin {
     @Unique private Vec3 neo$lastSafeWallPos;
     @Unique private BlockPos neo$lastEyeBlockPos;
     @Unique private BlockState neo$lastEyeBlockState;
+    @Unique private BlockPos neo$lastClimbablePos;
+    @Unique private BlockState neo$lastClimbableState;
+    @Unique private boolean neo$lastClimbableResult;
+
+    @WrapOperation(
+        method = "aiStep",
+        at = @At(
+            value = "INVOKE",
+            target = "Lnet/minecraft/world/entity/LivingEntity;travel(Lnet/minecraft/world/phys/Vec3;)V"
+        )
+    )
+    private void neo$skipDormantOrDistantAmbientTravel(LivingEntity self, Vec3 travelVector, Operation<Void> original) {
+        if (!OutsideEntityOptimizer.shouldSkipOutsideTravel(self, travelVector)) {
+            original.call(self, travelVector);
+        }
+    }
+
+    @Inject(method = "onClimbable", at = @At("HEAD"), cancellable = true)
+    private void neo$cachedOutsideOnClimbable(CallbackInfoReturnable<Boolean> cir) {
+        if ((Object) this instanceof Mob mob
+            && OutsideWorldOptimizer.enabled()
+            && this.neo$lastClimbablePos != null
+            && mob.blockPosition().equals(this.neo$lastClimbablePos)
+            && mob.level().getBlockState(this.neo$lastClimbablePos) == this.neo$lastClimbableState
+            && !Neodymium2.regionProtects(mob)) {
+            cir.setReturnValue(this.neo$lastClimbableResult);
+        }
+    }
+
+    @Inject(method = "onClimbable", at = @At("RETURN"))
+    private void neo$recordClimbableState(CallbackInfoReturnable<Boolean> cir) {
+        if ((Object) this instanceof Mob mob) {
+            BlockPos pos = mob.blockPosition();
+            this.neo$lastClimbablePos = pos;
+            this.neo$lastClimbableState = mob.level().getBlockState(pos);
+            this.neo$lastClimbableResult = cir.getReturnValueZ();
+        }
+    }
 
     @Inject(method = "pushEntities", at = @At("HEAD"), cancellable = true)
     private void neo$tightOutsidePushEntities(CallbackInfo ci) {

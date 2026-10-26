@@ -153,6 +153,17 @@ public final class OutsideSpawnAndDensity {
         return density;
     }
 
+    public static int getChunkDensity(int cx, int cz, int serverTick) {
+        int slot = (int) (((cx * 0x9E3779B97F4A7C15L ^ cz * 0xBF58476D1CE4E5B9L) >>> 32) & DENSITY_MASK);
+        long posTag = ((long) (cx & 0x3FFFF) << 46) | ((long) (cz & 0x3FFFF) << 28);
+        long entry = CHUNK_DENSITY[slot];
+        if ((entry & 0xFFFFFFFFF0000000L) != posTag) return 0;
+        int tick12 = serverTick & 0xFFF;
+        int entryTick = (int) ((entry >>> 16) & 0xFFFL);
+        if (((tick12 - entryTick) & 0xFFF) > 20) return 0;
+        return Math.max((int) ((entry >>> 8) & 0xFFL), (int) (entry & 0xFFL));
+    }
+
     public static void recordBlockedNametagBypass(Entity entity) {
         if (entity.hasCustomName()) {
             String exempt = Neodymium2.snapshot().settings().villagerLobotomy().exemptName();

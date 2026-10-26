@@ -87,7 +87,8 @@ public final class Neodymium2 implements ModInitializer {
     public static void assertServerThread(){if(server==null||!server.isSameThread())throw new IllegalStateException("Region policies must change on the server thread");}
     private static boolean selected(Entity entity){
         var s=current;
-        if(!s.settings.enabled()||!s.guard.isEmpty()||!s.types.contains(entity.getType()))return false;
+        if(!s.settings.enabled()||!s.guard.isEmpty())return false;
+        if(!s.types.contains(entity.getType())&&!(s.settings.outsideEntityTightening()&&entity instanceof Mob&&!OutsideEntityOptimizer.isExempt(entity)))return false;
         var tags=entity.entityTags();
         if(tags instanceof FastEntityTagSet fast)return !fast.hasHotFlag(FastEntityTagSet.FLAG_EXCLUDE_EAR);
         return !tags.contains("exclude_ear");
@@ -99,7 +100,8 @@ public final class Neodymium2 implements ModInitializer {
     }
     public static boolean excluded(boolean original,Entity entity){if(original&&mayReclaim(entity)){reclaimedDecisions++;return false;}return original;}
     public static ActivationType profile(ActivationType original,Entity entity){return mayReclaim(entity)?current.profile:original;}
-    public static double searchRange(double original){var s=current;return s.settings.enabled()&&s.guard.isEmpty()?Math.max(original,s.settings.activationRange()):original;}
+    public static double searchRange(double original){var s=current;if(!s.settings.enabled()||!s.guard.isEmpty())return original;if(s.settings.outsideEntityTightening())return Math.min(original,Math.max(24.0,s.settings.activationRange()));return Math.max(original,s.settings.activationRange());}
+    public static double searchVerticalRange(double original){var s=current;return s.settings.enabled()&&s.guard.isEmpty()&&s.settings.outsideEntityTightening()?Math.min(original,Math.max(32.0,s.settings.activationRange()+8.0)):original;}
     private static String dimensionKey(Level level){
         if(level==lastDimLevel){String k=lastDimKey;if(k!=null)return k;}
         String k=dimensionKeys.get(level);
@@ -158,7 +160,7 @@ public final class Neodymium2 implements ModInitializer {
         }
         if(regionProtects(entity))return true;
         if(entity.hasCustomName())OutsideSpawnAndDensity.recordBlockedNametagBypass(entity);
-        if(entity instanceof net.minecraft.world.entity.npc.villager.Villager)return VillagerLobotomy.enabled();
+        if(entity instanceof net.minecraft.world.entity.npc.villager.Villager&&!OutsideEntityOptimizer.enabled())return VillagerLobotomy.enabled();
         if(entity instanceof Mob mob&&(OutsideEntityOptimizer.isInteractiveOrBreeding(mob)||OutsideEntityOptimizer.isActiveMobFarmMonster(mob)))return true;
         return false;
     }

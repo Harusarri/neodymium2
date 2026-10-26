@@ -1,8 +1,10 @@
 package kr.harusarri.neodymium2.mixin;
 
+import kr.harusarri.neodymium2.Neodymium2;
 import kr.harusarri.neodymium2.core.DormantTickingWrapper;
 import kr.harusarri.neodymium2.core.LevelDormantTickersAccess;
 import net.minecraft.core.BlockPos;
+import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.entity.TickingBlockEntity;
 import org.spongepowered.asm.mixin.Mixin;
@@ -26,9 +28,16 @@ public abstract class RebindableTickingWrapperMixin implements DormantTickingWra
     @Unique
     private boolean neo$unlinked;
 
+    @Unique
+    private long neo$cachedSortGen = -1L;
+
+    @Unique
+    private long neo$cachedSortKey = Long.MIN_VALUE;
+
     @Override
     public void neo$bindLevel(Level level) {
         this.neo$level = level;
+        this.neo$cachedSortGen = -1L;
         if (this.ticker != null) {
             BlockPos p = this.ticker.getPos();
             if (p != null) {
@@ -50,6 +59,29 @@ public abstract class RebindableTickingWrapperMixin implements DormantTickingWra
     @Override
     public void neo$setUnlinked(boolean unlinked) {
         this.neo$unlinked = unlinked;
+    }
+
+    @Override
+    public long neo$getCachedSortKey(Level level, long regionGen) {
+        if (this.neo$cachedSortGen == regionGen) {
+            return this.neo$cachedSortKey;
+        }
+        BlockPos pos = this.ticker != null ? this.ticker.getPos() : null;
+        if (pos != null) {
+            this.neo$lastPos = pos;
+        } else {
+            pos = this.neo$lastPos;
+        }
+        long key;
+        if (pos == null || Neodymium2.regionProtectsBlock(level, pos)) {
+            key = Long.MIN_VALUE;
+        } else {
+            long ck = ChunkPos.pack(pos);
+            key = ck == Long.MIN_VALUE ? Long.MIN_VALUE + 1L : ck;
+        }
+        this.neo$cachedSortKey = key;
+        this.neo$cachedSortGen = regionGen;
+        return key;
     }
 
     @Inject(method = "<init>", at = @At("RETURN"))

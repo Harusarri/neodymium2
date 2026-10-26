@@ -45,11 +45,12 @@ public final class SpatialIndex {
             byte r=right.classifyChunk(x0,z0,x1,z1);return l>=r?l:r;
         }
         byte chunkState(int cx,int cz) {
+            double x0=cx*16.0,z0=cz*16.0;
+            if(bounds.minX>x0+16.0||bounds.maxX<x0||bounds.minZ>z0+16.0||bounds.maxZ<z0)return CHUNK_OUTSIDE;
             long tag=(1L<<62)|((cx&0x1FFFFFFFL)<<31)|((cz&0x1FFFFFFFL)<<2);
-            int slot=(int)((cx*0x9E3779B97F4A7C15L^cz*0xBF58476D1CE4E5B9L)>>>52);
+            int slot=(int)((cx*0x9E3779B97F4A7C15L^cz*0xBF58476D1CE4E5B9L)>>>50);
             long entry=chunkCache[slot];
             if((entry&~3L)==tag)return (byte)(entry&3L);
-            double x0=cx*16.0,z0=cz*16.0;
             byte state=classifyChunk(x0,z0,x0+16.0,z0+16.0);
             chunkCache[slot]=tag|(state&3L);
             return state;
@@ -68,7 +69,7 @@ public final class SpatialIndex {
     }
     private static Node build(List<Box> boxes,boolean root) {
         Box bounds=boxes.getFirst();for(Box b:boxes)bounds=bounds.union(b);
-        long[] cache=root?new long[4096]:null;
+        long[] cache=root?new long[16384]:null;
         if(boxes.size()<=6)return new Node(bounds,null,null,boxes.toArray(Box[]::new),cache);
         double x=bounds.maxX-bounds.minX,y=bounds.maxY-bounds.minY,z=bounds.maxZ-bounds.minZ;int axis=x>=y&&x>=z?0:y>=z?1:2;
         boxes.sort(Comparator.comparingDouble(b->b.center(axis)));int split=boxes.size()/2;
