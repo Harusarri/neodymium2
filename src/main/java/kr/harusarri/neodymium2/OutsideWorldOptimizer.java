@@ -339,6 +339,11 @@ public final class OutsideWorldOptimizer {
         return seen;
     }
 
+    private static ServerLevel lastMobsAtBiomeLevel;
+    private static net.minecraft.world.level.biome.Biome lastMobsAtBiome;
+    private static MobCategory lastMobsAtBiomeCategory;
+    private static WeightedList<MobSpawnSettings.SpawnerData> lastMobsAtBiomeResult;
+
     /**
      * Empty-Structure NaturalSpawner.mobsAt Short-Circuit:
      * In CHUNK_OUTSIDE, when a chunk has zero structure references (chunk.getAllReferences().isEmpty()),
@@ -350,9 +355,17 @@ public final class OutsideWorldOptimizer {
         LevelChunk outsideChunk = RegionSpawner.currentOutsideChunk();
         if (outsideChunk != null && RegionSpawner.isCurrentOutsideChunkStructureEmpty()) {
             shortCircuitedStructureSpawns++;
-            var base = level.dimensionType().attributes().applyModifier(EnvironmentAttributes.NATURAL_MOB_SPAWNS, MobSpawnSettings.EMPTY);
             var rough = outsideChunk.getNoiseBiome(pos.getX() >> 2, pos.getY() >> 2, pos.getZ() >> 2).value();
-            return rough.getAttributes().applyModifier(EnvironmentAttributes.NATURAL_MOB_SPAWNS, base).getMobsToSpawn(category);
+            if (level == lastMobsAtBiomeLevel && rough == lastMobsAtBiome && category == lastMobsAtBiomeCategory && lastMobsAtBiomeResult != null) {
+                return lastMobsAtBiomeResult;
+            }
+            var base = level.dimensionType().attributes().applyModifier(EnvironmentAttributes.NATURAL_MOB_SPAWNS, MobSpawnSettings.EMPTY);
+            var res = rough.getAttributes().applyModifier(EnvironmentAttributes.NATURAL_MOB_SPAWNS, base).getMobsToSpawn(category);
+            lastMobsAtBiomeLevel = level;
+            lastMobsAtBiome = rough;
+            lastMobsAtBiomeCategory = category;
+            lastMobsAtBiomeResult = res;
+            return res;
         }
         if (RegionSpawner.isInsideProtectedChunk()) return null;
         int cx = pos.getX() >> 4, cz = pos.getZ() >> 4;
@@ -360,9 +373,17 @@ public final class OutsideWorldOptimizer {
         var chunk = level.getChunkSource().getChunkNow(cx, cz);
         if (chunk != null && chunk.getAllReferences().isEmpty()) {
             shortCircuitedStructureSpawns++;
-            var base = level.dimensionType().attributes().applyModifier(EnvironmentAttributes.NATURAL_MOB_SPAWNS, MobSpawnSettings.EMPTY);
             var rough = chunk.getNoiseBiome(pos.getX() >> 2, pos.getY() >> 2, pos.getZ() >> 2).value();
-            return rough.getAttributes().applyModifier(EnvironmentAttributes.NATURAL_MOB_SPAWNS, base).getMobsToSpawn(category);
+            if (level == lastMobsAtBiomeLevel && rough == lastMobsAtBiome && category == lastMobsAtBiomeCategory && lastMobsAtBiomeResult != null) {
+                return lastMobsAtBiomeResult;
+            }
+            var base = level.dimensionType().attributes().applyModifier(EnvironmentAttributes.NATURAL_MOB_SPAWNS, MobSpawnSettings.EMPTY);
+            var res = rough.getAttributes().applyModifier(EnvironmentAttributes.NATURAL_MOB_SPAWNS, base).getMobsToSpawn(category);
+            lastMobsAtBiomeLevel = level;
+            lastMobsAtBiome = rough;
+            lastMobsAtBiomeCategory = category;
+            lastMobsAtBiomeResult = res;
+            return res;
         }
         return null;
     }
@@ -526,6 +547,10 @@ public final class OutsideWorldOptimizer {
         fastTagBitLookups = 0;
         skippedInWallChecks = 0;
         memoizedSelectorHits = 0;
+        lastMobsAtBiomeLevel = null;
+        lastMobsAtBiome = null;
+        lastMobsAtBiomeCategory = null;
+        lastMobsAtBiomeResult = null;
         Arrays.fill(EXPLOSION_KEYS, 0L);
         Arrays.fill(EXPLOSION_VALUES, 0.0f);
     }

@@ -18,9 +18,6 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 @Mixin(value = ServerLevel.class, priority = 900)
 public abstract class ServerLevelTightMixin implements ServerLevelTagAccess {
-    @Unique private long neo$lastBlockTickGameTime = Long.MIN_VALUE;
-    @Unique private long neo$lastBlockTickChunkPos = Long.MIN_VALUE;
-    @Unique private boolean neo$lastBlockTickResult;
     @Unique private int neo$lastEntitiesLoadedEpoch;
     @Unique private long neo$lastEntitiesLoadedChunkPos = Long.MIN_VALUE;
     @Unique private boolean neo$lastEntitiesLoadedResult;
@@ -34,24 +31,6 @@ public abstract class ServerLevelTightMixin implements ServerLevelTagAccess {
     @Override
     public void neo$setEntityLookupTagAccess(EntityLookupTagAccess access) {
         this.neo$entityLookupTagAccess = access;
-    }
-
-    @Inject(method = "shouldTickBlocksAt(J)Z", at = @At("HEAD"), cancellable = true)
-    private void neo$cacheBlockTickChunk(long chunkPos, CallbackInfoReturnable<Boolean> cir) {
-        ServerLevel self = (ServerLevel) (Object) this;
-        long gt = self.getGameTime();
-        if (gt == this.neo$lastBlockTickGameTime && chunkPos == this.neo$lastBlockTickChunkPos) {
-            OutsideWorldOptimizer.recordCachedBlockTickChunk();
-            cir.setReturnValue(this.neo$lastBlockTickResult);
-        }
-    }
-
-    @Inject(method = "shouldTickBlocksAt(J)Z", at = @At("RETURN"))
-    private void neo$storeBlockTickChunk(long chunkPos, CallbackInfoReturnable<Boolean> cir) {
-        ServerLevel self = (ServerLevel) (Object) this;
-        this.neo$lastBlockTickGameTime = self.getGameTime();
-        this.neo$lastBlockTickChunkPos = chunkPos;
-        this.neo$lastBlockTickResult = cir.getReturnValueZ();
     }
 
     @Inject(method = "areEntitiesLoaded", at = @At("HEAD"), cancellable = true)

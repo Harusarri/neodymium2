@@ -54,7 +54,7 @@ public class ModuleArchitectureTests {
         for (String id : expectedIds) {
             check(desc.contains("[" + id + "]"), "describeModules contains " + id);
         }
-        check(desc.contains("EntityLookup") && desc.contains("ServerEntity") && desc.contains("SignBlock") && desc.contains("PoiCompetitorScan") && desc.contains("EntitySelector"), "describeModules contains new hooks");
+        check(desc.contains("EntityLookup") && desc.contains("ServerEntity") && desc.contains("SignBlock") && desc.contains("PoiCompetitorScan") && desc.contains("EntitySelector") && desc.contains("SimulationChunkTracker") && desc.contains("SpreadingSnowyBlock") && desc.contains("AttributeMap") && desc.contains("SpecialDates"), "describeModules contains new hooks");
         String combined = ModuleRegistry.combinedStatus();
         check(combined.contains("구역 스폰") && combined.contains("발전과제 최적화") && combined.contains("타입인덱스/청크틱캐시/유휴블록엔티티생략") && combined.contains("태그·NBT셀렉터/POI경쟁/YAWP캐시"), "combinedStatus includes all modules and new telemetry");
         System.out.println("NEO_MODULE_ARCH_PASS checks=" + checks);

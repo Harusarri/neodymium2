@@ -52,7 +52,11 @@
     "EntitySelectorMixin",
     "MemoryModuleTypeMixin",
     "BrainTightMixin",
-    "HolderReferenceTightMixin"
+    "HolderReferenceTightMixin",
+    "SimulationChunkTrackerTightMixin",
+    "SpreadingSnowyBlockTightMixin",
+    "AttributeMapTightMixin",
+    "SpecialDatesTightMixin"
   ],
   "injectors": {
     "defaultRequire": 1

@@ -93,11 +93,45 @@ public abstract class NaturalSpawnerMixin {
         }
     }
 
+    @org.spongepowered.asm.mixin.Unique
+    private static ServerLevel neo$lastMobsAtLevel;
+    @org.spongepowered.asm.mixin.Unique
+    private static MobCategory neo$lastMobsAtCategory;
+    @org.spongepowered.asm.mixin.Unique
+    private static long neo$lastMobsAtPos = Long.MIN_VALUE;
+    @org.spongepowered.asm.mixin.Unique
+    private static long neo$lastMobsAtTick = Long.MIN_VALUE;
+    @org.spongepowered.asm.mixin.Unique
+    private static WeightedList<MobSpawnSettings.SpawnerData> neo$lastMobsAtResult;
+
     @Inject(method = "mobsAt", at = @At("HEAD"), cancellable = true)
     private static void neo$shortCircuitEmptyStructureMobsAt(ServerLevel level, StructureManager structureManager, ChunkGenerator generator, MobCategory category, BlockPos pos, CallbackInfoReturnable<WeightedList<MobSpawnSettings.SpawnerData>> cir) {
+        long packedPos = pos.asLong();
+        long tick = level.getGameTime();
+        if (level == neo$lastMobsAtLevel && category == neo$lastMobsAtCategory && packedPos == neo$lastMobsAtPos && tick == neo$lastMobsAtTick && neo$lastMobsAtResult != null) {
+            cir.setReturnValue(neo$lastMobsAtResult);
+            return;
+        }
         var fast = OutsideWorldOptimizer.tryShortCircuitMobsAt(level, category, pos);
         if (fast != null) {
+            neo$lastMobsAtLevel = level;
+            neo$lastMobsAtCategory = category;
+            neo$lastMobsAtPos = packedPos;
+            neo$lastMobsAtTick = tick;
+            neo$lastMobsAtResult = fast;
             cir.setReturnValue(fast);
+        }
+    }
+
+    @Inject(method = "mobsAt", at = @At("RETURN"))
+    private static void neo$cacheMobsAtReturn(ServerLevel level, StructureManager structureManager, ChunkGenerator generator, MobCategory category, BlockPos pos, CallbackInfoReturnable<WeightedList<MobSpawnSettings.SpawnerData>> cir) {
+        WeightedList<MobSpawnSettings.SpawnerData> res = cir.getReturnValue();
+        if (res != null) {
+            neo$lastMobsAtLevel = level;
+            neo$lastMobsAtCategory = category;
+            neo$lastMobsAtPos = pos.asLong();
+            neo$lastMobsAtTick = level.getGameTime();
+            neo$lastMobsAtResult = res;
         }
     }
 

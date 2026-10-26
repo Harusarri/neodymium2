@@ -48,13 +48,16 @@ public abstract class LevelDormantTickersMixin implements LevelDormantTickersAcc
     private final Set<TickingBlockEntity> neo$parkedSleepingTickers = Collections.newSetFromMap(new IdentityHashMap<>());
 
     @Unique
-    private final int[] neo$chunkTickEpoch = new int[256];
+    private static final int NEO$CHUNK_TICK_MASK = 8191;
 
     @Unique
-    private final long[] neo$chunkTickKeys = new long[256];
+    private final int[] neo$chunkTickEpoch = new int[NEO$CHUNK_TICK_MASK + 1];
 
     @Unique
-    private final boolean[] neo$chunkTickVals = new boolean[256];
+    private final long[] neo$chunkTickKeys = new long[NEO$CHUNK_TICK_MASK + 1];
+
+    @Unique
+    private final boolean[] neo$chunkTickVals = new boolean[NEO$CHUNK_TICK_MASK + 1];
 
     @Unique
     private boolean neo$needsChunkSort;
@@ -215,7 +218,7 @@ public abstract class LevelDormantTickersMixin implements LevelDormantTickersAcc
                         canTick = lastChunkCanTick;
                         OutsideWorldOptimizer.recordCachedBlockTickChunk();
                     } else {
-                        int slot = (int) ((chunkKey ^ (chunkKey >>> 32)) & 255);
+                        int slot = (int) (it.unimi.dsi.fastutil.HashCommon.mix(chunkKey) & NEO$CHUNK_TICK_MASK);
                         if (this.neo$chunkTickEpoch[slot] == epoch && this.neo$chunkTickKeys[slot] == chunkKey) {
                             canTick = this.neo$chunkTickVals[slot];
                             OutsideWorldOptimizer.recordCachedBlockTickChunk();

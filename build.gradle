@@ -70,7 +70,7 @@ jar {
     }
 }
 
-def unitTestClasses = ['CoreTests', 'ChunkTraversalTests', 'VillagerConfigTests', 'PoiRevisionTests']
+def unitTestClasses = ['CoreTests', 'ChunkTraversalTests', 'VillagerConfigTests', 'PoiRevisionTests', 'ModuleArchitectureTests']
 unitTestClasses.each { mainClassName ->
     tasks.register("run${mainClassName}", JavaExec) {
         dependsOn classes, compileUnitTestJava
